@@ -16,6 +16,7 @@ function makeCreature(name, x, y, biome, R) {
 function updateCreature(c, m, dt, pl) {
   // pets follow the player, enemies chase when close, everything else wanders
   if (c.npc) { c.px = c.x * TS; c.py = c.y * TS; return; } // traders stay at their post
+  if (c.carried) return; // lifted by your wings: it goes where you go
   // a world boss fights you near its lair and walks home when you leave
   const away = c.home && Math.abs(pl.x - c.home.x) + Math.abs(pl.y - c.home.y) > WorldBosses.AGGRO;
   const gx = away ? c.home.x : pl.x, gy = away ? c.home.y : pl.y;

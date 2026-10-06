@@ -62,7 +62,9 @@ defGlyph('emoteBang', ['...11...', '...11...', '...11...', '...11...', '...11...
 defGlyph('lockIcon', ['..111...', '.1...1..', '.1...1..', '1111111.', '1112111.', '1112111.', '1111111.', '........'], [P.gold, '#3a2408'], { emit: [1] });
 defGlyph('icon_up', ['...1....', '..111...', '.11111..', '1111111.', '..111...', '..111...', '..111...', '........'], ['#ffe84a'], { emit: true });
 defGlyph('icon_beam', ['........', '1.......', '.1......', '..111111', '.1......', '1.......', '........', '........'], ['#9ad8ff'], { emit: true });
-defGlyph('icon_vortex', ['..1111..', '.1....1.', '1..11..1', '1.1..1.1', '1.1.11.1', '1..1...1', '.1....1.', '..111...'], ['#c08aff'], { emit: true });
+defGlyph('icon_drain', ['...1....', '..121...', '.12221..', '.12221..', '1222221.', '1222221.', '.12221..', '..111...'], ['#ff4a6a', '#ffd0d8'], { emit: true });
+defGlyph('icon_firework', ['1..2..3.', '.1.2.3..', '..123...', '22.1.33.', '..321...', '.3.2.1..', '3..2..1.', '...4....'], ['#ff4a4a', '#ffe84a', '#4ad8ff', '#ff9a3a'], { emit: true });
+defGlyph('icon_wings', ['........', '1......1', '11....11', '121..121', '1221.221', '.122.21.', '..1..1..', '........'], ['#c8d8f0', '#ffffff'], { emit: true });
 defGlyph('icon_shadow', ['....11..', '...1111.', '1..1111.', '.1..11..', '1..1111.', '.1.1111.', '1...11..', '...1..1.'], ['#9a7ae8'], { emit: true });
 defGlyph('icon_star', ['1.......', '.1..1...', '..1111..', '.111111.', '..1111..', '.11.11..', '.1...1..', '........'], ['#ffd84a'], { emit: true });
 // the special trader: a hooded wanderer with a lantern
@@ -304,7 +306,7 @@ const Combat = {
   },
   // --- the player's health ------------------------------------------------------------------
   hurt(dmg) {
-    if (this.invT > 0 || this.deathT > 0 || game.pending) return;
+    if (this.invT > 0 || this.deathT > 0 || game.pending || Powers.flight) return; // nothing reaches you in the air
     if (Powers.possess) Powers.endPossess(true);
     this.hp -= dmg; this.invT = 0.9; this.hurtT = 0.35; this.lastHurt = game.time; this.showHearts(); game.player.hitT = 0.3;
     Powers.shake = Math.max(Powers.shake, 2); Sound.sfx('hurt');
@@ -314,7 +316,7 @@ const Combat = {
   },
   die() {
     this.hp = 0; this.deathT = 1.4;
-    Powers.charging = false; Sound.chargeStop();
+    Powers.charging = false; Sound.chargeStop(); Powers.flight = null;
     const p = game.player;
     for (let n = 0; n < 40; n++) spawnParticle('beamSpark', p.px + 4, p.py + 4, (Math.random() - 0.5) * 120, (Math.random() - 0.5) * 120, 0.8, n % 2 ? '#ffffff' : '#ff5a50');
     Powers.rings.push({ x: p.px + 4, y: p.py + 4, r: 2, vr: 60, life: 0.8, max: 0.8, k: 'ember' });
@@ -473,7 +475,7 @@ const Combat = {
       } else {
         c.cd -= dt;
         // a possessed body fools ordinary enemies, but not bosses
-        if (d < (c.r ? c.r + 4 : 10) && c.cd <= 0 && c.hp > 0.05 && (!Powers.possess || c.boss)) { c.cd = 1; this.hurt(c.def.dmg); }
+        if (!c.carried && d < (c.r ? c.r + 4 : 10) && c.cd <= 0 && c.hp > 0.05 && (!Powers.possess || c.boss)) { c.cd = 1; this.hurt(c.def.dmg); }
         // ranged attackers fire at the nearest player (only where we run the enemies)
         if (this.auth && c.def.shot) {
           c.shotCd -= dt;

@@ -15,12 +15,16 @@ const POWERS = {
   prism: { glow: '#ff6ad8', core: '#ffffff', note: 784, rainbow: true },
 };
 for (const k in POWERS) POWERS[k].rgb = hexToRgb(POWERS[k].glow);
-// Specials: the beam plus three you learn from traders. All of them channel:
+// Specials: the beam plus five you learn from traders. All of them channel:
 // hold to charge (time = seconds to full), release to cast. Anything but the
-// beam needs at least a third of a charge or it fizzles.
+// beam needs at least a third of a charge or it fizzles. Drain is different:
+// it works the whole time you hold it and does nothing on release.
+// (Drain keeps the save id 'vortex' from when it was a vortex.)
 const SPECIALS = {
   beam: { name: 'BEAM', icon: 'icon_beam', time: 1.1 },
-  vortex: { name: 'VORTEX', icon: 'icon_vortex', time: 1.5, glow: '#b06aff', core: '#f0e0ff', note: 220 },
+  vortex: { name: 'DRAIN', icon: 'icon_drain', time: 1.0, glow: '#ff4a6a', core: '#ffd0d8', note: 196, channel: true },
+  firework: { name: 'FIREWORKS', icon: 'icon_firework', time: 1.4, glow: '#ff9a3a', core: '#fff0c0', note: 698 },
+  wings: { name: 'WINGS', icon: 'icon_wings', time: 1.0, glow: '#e8f4ff', core: '#ffffff', note: 587 },
   shadow: { name: 'SHADOW STEP', icon: 'icon_shadow', time: 0.9, glow: '#7a5ad8', core: '#e8dcff', note: 165 },
   starfall: { name: 'STARFALL', icon: 'icon_star', time: 1.7, glow: '#ffd84a', core: '#fffbe0', note: 880 },
 };
@@ -37,7 +41,7 @@ const Powers = {
   kind: (() => { try { const k = localStorage.getItem('worldmap-power'); return POWERS[k] ? k : 'spark'; } catch (e) { return 'spark'; } })(),
   charging: false, charge: 0, aim: null, arcs: [], beams: [], rings: [], lights: [],
   shake: 0, absorbT: 0, seq: 0, lastBeam: null, ringT: 0,
-  vortices: [], meteors: [], trails: [], possess: null,
+  meteors: [], trails: [], possess: null, rockets: [], flight: null, drainT: 0,
 
   color(k, i) {
     const P = pal(k);
@@ -51,7 +55,7 @@ const Powers = {
   // colour scheme for the charge: the beam wears your absorbed power, specials their own
   chargeKind() { const sp = this.special(); return sp === 'beam' ? this.kind : sp; },
   startCharge(aim) {
-    if (!this.canAct() || this.charging) return;
+    if (!this.canAct() || this.charging || this.flight) return;
     if (this.possess) { this.endPossess(); return; } // the special button also lets go of a possessed body
     this.charging = true; this.charge = 0; this.aim = aim; this.ringT = 0;
     Sound.chargeStart(pal(this.chargeKind()).note);
@@ -70,13 +74,15 @@ const Powers = {
   // --- casting ---------------------------------------------------------------------
   fire(c) {
     const sp = this.special();
+    if (SPECIALS[sp].channel) return; // drain only works while held
     if (sp !== 'beam') {
       if (c < 0.33) { // not channelled long enough: a puff of sparks and nothing more
         const [x, y] = this.center(game.player);
         for (let n = 0; n < 8; n++) spawnParticle('beamSpark', x, y, (Math.random() - 0.5) * 40, (Math.random() - 0.5) * 40, 0.3, this.color(sp));
         Sound.sfx('poke'); return;
       }
-      if (sp === 'vortex') this.castVortex(c);
+      if (sp === 'firework') this.castFireworks(c);
+      else if (sp === 'wings') this.castWings(c);
       else if (sp === 'shadow') this.castShadow(c);
       else if (sp === 'starfall') this.castStarfall(c);
       return;
@@ -94,45 +100,55 @@ const Powers = {
     const [x0, y0] = this.center(e);
     this.spawnBeam(x0, y0, bm.a, clamp(bm.c, 0, 1), POWERS[e.pk] ? e.pk : 'spark', e);
   },
+  // the beam ricochets off walls: one bounce, up to three on a full charge
   spawnBeam(x0, y0, a, c, k, owner) {
-    const m = game.map, ca = Math.cos(a), sa = Math.sin(a);
-    const range = (7 + c * 15) * TS;
-    let d = 5, hit = false;
-    for (; d < range; d += 1.5) {
-      const tx = Math.floor((x0 + ca * d) / TS), ty = Math.floor((y0 + sa * d) / TS);
-      if (!m.inb(tx, ty)) { hit = true; break; }
-      const i = ty * m.w + tx;
-      if (m.solid[i] && !m.water[i]) { hit = true; break; }
-    }
-    const x1 = x0 + ca * d, y1 = y0 + sa * d, w = 1 + Math.round(c * 3);
-    const life = 0.3 + c * 0.3;
-    this.beams.push({ x0, y0, x1, y1, a, w, k, life, max: life, owner });
+    const m = game.map;
+    let range = (7 + c * 15) * TS, bounces = 1 + Math.round(c * 2);
+    const w = 1 + Math.round(c * 3), life = 0.3 + c * 0.3;
     this.shake = Math.max(this.shake, 0.6 + c * 2.4);
     Sound.sfx('beam', c);
-    // impact
-    if (hit) {
-      Sound.sfx('impact', c);
+    const hitSet = new Set();
+    for (let seg = 0; seg <= bounces && range > 8; seg++) {
+      const ca = Math.cos(a), sa = Math.sin(a);
+      let d = seg ? 1 : 5, hit = false, flipX = false;
+      for (; d < range; d += 1.5) {
+        const tx = Math.floor((x0 + ca * d) / TS), ty = Math.floor((y0 + sa * d) / TS);
+        const blocked = !m.inb(tx, ty) || (m.solid[ty * m.w + tx] && !m.water[ty * m.w + tx]);
+        if (!blocked) continue;
+        hit = true;
+        // which face did it strike? the tile we stepped in from tells us
+        const px = Math.floor((x0 + ca * (d - 1.5)) / TS);
+        flipX = px !== tx;
+        d -= 1.5;
+        break;
+      }
+      const x1 = x0 + ca * d, y1 = y0 + sa * d;
+      this.beams.push({ x0, y0, x1, y1, a, w, k, life, max: life, owner });
+      if (owner === game.player) for (const cr of m.creatures.slice()) {
+        if (!Combat.isEnemy(cr) || hitSet.has(cr)) continue;
+        const cx = cr.px + 4, cy = cr.py + 4;
+        const t = clamp(((cx - x0) * ca + (cy - y0) * sa) / d, 0, 1);
+        const dx = x0 + ca * d * t - cx, dy = y0 + sa * d * t - cy, rr = 6 + (cr.r ? cr.r - 6 : 0) + w;
+        if (dx * dx + dy * dy > rr * rr) continue;
+        hitSet.add(cr);
+        Combat.damage(cr, (2 + c * 8) * Combat.power() * (seg ? 0.75 : 1), k, a);
+      }
+      if (!hit) break;
+      Sound.sfx('impact', c * (seg ? 0.5 : 1));
       this.rings.push({ x: x1, y: y1, r: 2, vr: 40 + c * 60, life: 0.35, max: 0.35, k });
-      for (let n = 0; n < 10 + c * 20; n++) {
+      for (let n = 0; n < 8 + c * 14; n++) {
         const pa = a + Math.PI + (Math.random() - 0.5) * 2.4, sp = 20 + Math.random() * 60 * (0.5 + c);
         spawnParticle('beamSpark', x1, y1, Math.cos(pa) * sp, Math.sin(pa) * sp, 0.3 + Math.random() * 0.4, this.color(k));
       }
-    }
-    // the beam hurts enemies along its length (a friend's beam is only drawn here)
-    if (owner === game.player) for (const cr of m.creatures.slice()) {
-      if (!Combat.isEnemy(cr)) continue;
-      const cx = cr.px + 4, cy = cr.py + 4;
-      const t = clamp(((cx - x0) * ca + (cy - y0) * sa) / d, 0, 1);
-      const dx = x0 + ca * d * t - cx, dy = y0 + sa * d * t - cy;
-      if (dx * dx + dy * dy > 36 + w * 9) continue;
-      Combat.damage(cr, (2 + c * 8) * (owner === game.player ? Combat.power() : 0.5), k, a);
+      range -= d; x0 = x1; y0 = y1;
+      a = flipX ? Math.PI - a : -a;
     }
   },
 
   // where a special will land: toward the cursor (clamped to its reach) or ahead of you
   target(sp, c) {
     const p = game.player, [x0, y0] = this.center(p);
-    const reach = (sp === 'vortex' ? 3 + c * 4 : sp === 'starfall' ? 4 + c * 5 : 3 + c * 7) * TS;
+    const reach = (sp === 'firework' ? 5 + c * 5 : sp === 'wings' ? 3 + c * 5 : sp === 'starfall' ? 4 + c * 5 : 3 + c * 7) * TS;
     let x, y;
     if (this.aim) {
       const dx = this.aim.x - x0, dy = this.aim.y - y0, d = Math.hypot(dx, dy);
@@ -142,16 +158,8 @@ const Powers = {
       const [fx, fy] = DIRS[p.face];
       x = x0 + fx * reach * 0.8; y = y0 + fy * reach * 0.8;
     }
-    const r = (sp === 'vortex' ? 1.6 + c * 2.6 : 1.2 + c * 1.8) * TS;
+    const r = (1.2 + c * 1.8) * TS;
     return { x, y, r, reach };
-  },
-  // VORTEX: a whirlpool that drags enemies in, grinds them, then collapses
-  castVortex(c) {
-    const T = this.target('vortex', c), life = 1.6 + c * 2.4;
-    this.vortices.push({ x: T.x, y: T.y, r: T.r, life, max: life, tick: 0.2, pull: 0, a: 0, dmg: (0.5 + c) * Combat.power() });
-    this.rings.push({ x: T.x, y: T.y, r: T.r, vr: -T.r * 2, life: 0.4, max: 0.4, k: 'vortex' });
-    this.shake = Math.max(this.shake, 1 + c * 2);
-    Sound.sfx('beam', 0.2 + c * 0.3); Sound.sfx('absorb', 220);
   },
   // SHADOW STEP: vanish and reappear inside a creature (not a boss), wearing it
   // as a disguise; ordinary enemies ignore you until you burst out of it, which
@@ -215,43 +223,138 @@ const Powers = {
     }
     Sound.sfx('absorb', 880);
   },
-  updateSpecials(dt) {
-    const m = game.map;
-    for (let i = this.vortices.length - 1; i >= 0; i--) {
-      const v = this.vortices[i];
-      v.life -= dt; v.a += dt * 7; v.tick -= dt; v.pull -= dt;
-      for (let n = Math.ceil(dt * 60); n > 0; n--) {
-        const a = Math.random() * Math.PI * 2, r = v.r * (0.5 + Math.random() * 0.6);
-        spawnParticle('beamSpark', v.x + Math.cos(a) * r, v.y + Math.sin(a) * r, -Math.sin(a) * 70 - Math.cos(a) * 45, Math.cos(a) * 70 - Math.sin(a) * 45, 0.35, Math.random() < 0.5 ? '#b06aff' : '#f0e0ff');
-      }
-      const inside = [];
-      for (const cr of m.creatures) {
-        if (!Combat.isEnemy(cr)) continue;
-        const d = Math.hypot(cr.px + 4 - v.x, cr.py + 4 - v.y);
-        if (d < v.r + (cr.r || 4)) inside.push([cr, d]);
-      }
-      if (v.pull <= 0) {
-        v.pull = 0.22;
-        for (const [cr, d] of inside) {
-          if (cr.boss || cr.moving || d < 6) continue;
-          const dx = v.x - (cr.px + 4), dy = v.y - (cr.py + 4);
-          const sx = Math.abs(dx) > Math.abs(dy) ? Math.sign(dx) : 0, sy = sx ? 0 : Math.sign(dy);
-          const nx = cr.x + sx, ny = cr.y + sy;
-          if (m.blocked(nx, ny) || m.entr.has(ny * m.w + nx)) continue;
-          cr.fx = cr.x; cr.fy = cr.y; cr.x = nx; cr.y = ny; cr.t = 0; cr.moving = true; cr.wait = 0.3;
+  // DRAIN: while held, slowly pulls life out of every enemy close by and into you
+  drain(dt) {
+    const p = game.player, [x0, y0] = this.center(p), R = 5 * TS;
+    this.drainT -= dt;
+    const near = game.map.creatures.filter((cr) => Combat.isEnemy(cr) && Math.hypot(cr.px + 4 - x0, cr.py + 4 - y0) < R + (cr.r || 0));
+    for (const cr of near) if (Math.random() < dt * 25) {
+      // a thread of red motes drifting from the enemy into you
+      const sx = cr.px + 4 + (Math.random() - 0.5) * 6, sy = cr.py + 4 + (Math.random() - 0.5) * 6;
+      this.arcs.push({ x0: sx, y0: sy, cx: (sx + x0) / 2 + (Math.random() - 0.5) * 20, cy: (sy + y0) / 2 + (Math.random() - 0.5) * 20, t: 0, dur: 0.5, col: Math.random() < 0.5 ? '#ff4a6a' : '#ffd0d8', tgt: p });
+    }
+    if (this.drainT > 0) return;
+    this.drainT = 0.45;
+    let got = 0;
+    for (const cr of near) { const before = cr.hp; Combat.damage(cr, 0.5 * Combat.power(), 'void', Math.atan2(y0 - cr.py - 4, x0 - cr.px - 4)); got += Math.max(0, before - Math.max(0, cr.hp)); }
+    if (got > 0) {
+      this.drained = (this.drained || 0) + Math.min(got, 1) * 0.45; // slow: at most ~1 HP a second, however many are near
+      if (this.drained >= 1 && Combat.hp < Combat.maxHp()) { const h = Math.floor(this.drained); this.drained -= h; Combat.hp = Math.min(Combat.maxHp(), Combat.hp + h); Combat.showHearts(); Sound.sfx('heart'); }
+    }
+  },
+  // FIREWORKS: a fan of rockets that weave as they fly and burst at the end of their range
+  castFireworks(c) {
+    const p = game.player, [x0, y0] = this.center(p), T = this.target('firework', c);
+    const a0 = Math.atan2(T.y - y0, T.x - x0), n = 4 + Math.round(c * 6), dmg = (1.5 + c * 2) * Combat.power();
+    for (let k = 0; k < n; k++) {
+      const a = a0 + (Math.random() - 0.5) * 0.7, dist = T.reach * (0.65 + Math.random() * 0.35);
+      this.rockets.push({ x: x0, y: y0, a, sp: 130 + Math.random() * 40, curl: (Math.random() - 0.5) * 3.2, wob: Math.random() * 6, left: dist, t: -k * 0.05, dmg,
+        col: RAINBOW[Math.floor(Math.random() * RAINBOW.length)] });
+    }
+    Sound.sfx('shot', 'wand'); this.shake = Math.max(this.shake, 1);
+  },
+  burst(x, y, col, dmg) {
+    for (const cr of game.map.creatures.slice()) {
+      if (!Combat.isEnemy(cr)) continue;
+      if (Math.hypot(cr.px + 4 - x, cr.py + 4 - y) < 16 + (cr.r ? cr.r - 6 : 0)) Combat.damage(cr, dmg, 'ember', Math.atan2(cr.py + 4 - y, cr.px + 4 - x));
+    }
+    for (let n = 0; n < 22; n++) { const a = (n / 22) * Math.PI * 2; spawnParticle('beamSpark', x, y, Math.cos(a) * 70, Math.sin(a) * 70, 0.6, n % 3 ? col : '#ffffff'); }
+    this.rings.push({ x, y, r: 2, vr: 60, life: 0.3, max: 0.3, k: 'firework' });
+    this.shake = Math.max(this.shake, 1); Sound.sfx('impact', 0.35);
+  },
+  // WINGS: dash to a spot, then fly for two seconds over anything, steering
+  // with the arrow keys; enemies you touch are carried up and slammed down
+  castWings(c) {
+    const p = game.player, [x0, y0] = this.center(p), T = this.target('wings', c);
+    this.flight = { phase: 'dash', t: 0, dash: 0.22, x0: p.px, y0: p.py, x1: T.x - 4, y1: T.y - 4, fly: 2, a: Math.atan2(T.y - y0, T.x - x0), carried: [], k: c, h: 0 };
+    p.moving = false;
+    for (let n = 0; n < 16; n++) spawnParticle('beamSpark', x0, y0, (Math.random() - 0.5) * 60, (Math.random() - 0.5) * 60, 0.4, '#e8f4ff');
+    Sound.sfx('beam', 0.3);
+  },
+  // runs instead of the normal step-by-step walk while you are in the air
+  updateFlight(dt, dir) {
+    const F = this.flight, p = game.player, m = game.map;
+    F.t += dt;
+    if (F.phase === 'dash') {
+      const f = Math.min(1, F.t / F.dash), e = 1 - (1 - f) * (1 - f);
+      p.px = lerp(F.x0, F.x1, e); p.py = lerp(F.y0, F.y1, e); F.h = e * 7;
+      if (f >= 1) { F.phase = 'fly'; F.t = 0; }
+    } else if (F.phase === 'fly') {
+      const [dx, dy] = dir ? DIRS[dir] : [Math.cos(F.a) * 0.35, Math.sin(F.a) * 0.35];
+      if (dir) F.a = Math.atan2(dy, dx);
+      p.px = clamp(p.px + dx * 70 * dt, 0, (m.w - 1) * TS); p.py = clamp(p.py + dy * 70 * dt, 0, (m.h - 1) * TS);
+      if (dir) p.face = dir;
+      F.h = 7 + Math.sin(F.t * 9) * 1.5;
+      if (F.t >= F.fly) {
+        // only land on open ground; otherwise glide on to the nearest spot that is
+        const tx = Math.round(p.px / TS), ty = Math.round(p.py / TS);
+        const ok = (x, y) => m.inb(x, y) && !m.blocked(x, y) && !m.water[y * m.w + x] && !m.entr.has(y * m.w + x);
+        if (ok(tx, ty)) { F.phase = 'land'; F.t = 0; F.lx = tx; F.ly = ty; F.sx = p.px; F.sy = p.py; }
+        else {
+          let best = null;
+          for (let r = 1; r < 20 && !best; r++) for (let j = -r; j <= r && !best; j++) for (let i = -r; i <= r; i++) {
+            if (Math.max(Math.abs(i), Math.abs(j)) !== r || !ok(tx + i, ty + j)) continue;
+            best = [tx + i, ty + j]; break;
+          }
+          if (best) { F.phase = 'land'; F.t = 0; F.lx = best[0]; F.ly = best[1]; F.sx = p.px; F.sy = p.py; F.glide = 0.35; }
+          else F.fly += 0.5;
         }
       }
-      if (v.tick <= 0) {
-        v.tick = 0.4;
-        for (const [cr] of inside) Combat.damage(cr, v.dmg, 'void', Math.atan2(v.y - cr.py - 4, v.x - cr.px - 4));
+    } else if (F.phase === 'land') {
+      const f = Math.min(1, F.t / (F.glide || 0.18));
+      p.px = lerp(F.sx, F.lx * TS, f); p.py = lerp(F.sy, F.ly * TS, f); F.h = 7 * (1 - f);
+      if (f >= 1) { this.land(); return; }
+    }
+    p.x = p.tx = p.fx = clamp(Math.round(p.px / TS), 0, m.w - 1); p.y = p.ty = p.fy = clamp(Math.round(p.py / TS), 0, m.h - 1);
+    // scoop up enemies on the way (not bosses), and carry them along
+    for (const cr of m.creatures) {
+      if (cr.carried || cr.boss || !Combat.isEnemy(cr) || Math.hypot(cr.px - p.px, cr.py - p.py) > 9) continue;
+      cr.carried = true; cr.moving = false; F.carried.push(cr);
+      for (let n = 0; n < 8; n++) spawnParticle('beamSpark', cr.px + 4, cr.py + 4, (Math.random() - 0.5) * 50, -Math.random() * 50, 0.4, '#ffffff');
+    }
+    F.carried.forEach((cr, k) => { cr.px = p.px + (k % 2 ? 4 : -4); cr.py = p.py + 3; cr.lift = F.h + 2; });
+    if (Math.random() < dt * 30) spawnParticle('beamSpark', p.px + 4 + (Math.random() - 0.5) * 10, p.py + 6, 0, 10, 0.4, '#e8f4ff');
+  },
+  land() {
+    const F = this.flight, p = game.player, m = game.map;
+    this.flight = null;
+    p.place(F.lx, F.ly);
+    const x = p.px + 4, y = p.py + 4;
+    this.rings.push({ x, y, r: 2, vr: 90, life: 0.35, max: 0.35, k: 'wings' });
+    for (let n = 0; n < 16; n++) spawnParticle('step', x + (Math.random() - 0.5) * 8, y + 3, (Math.random() - 0.5) * 50, -Math.random() * 20, 0.5);
+    // carried enemies are slammed into the ground beside you
+    F.carried.forEach((cr, k) => {
+      cr.carried = false; cr.lift = 0;
+      let cx = F.lx, cy = F.ly;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1]].slice(k % 6).concat([[1, 0], [-1, 0], [0, 1], [0, -1]])) {
+        if (!m.blocked(F.lx + dx, F.ly + dy) && !m.entr.has((F.ly + dy) * m.w + F.lx + dx)) { cx = F.lx + dx; cy = F.ly + dy; break; }
       }
-      if (v.life <= 0) {
-        for (const [cr, d] of inside) if (d < v.r * 0.7) Combat.damage(cr, v.dmg * 3, 'void', Math.atan2(cr.py + 4 - v.y, cr.px + 4 - v.x));
-        this.rings.push({ x: v.x, y: v.y, r: 2, vr: v.r * 4, life: 0.4, max: 0.4, k: 'vortex' });
-        for (let n = 0; n < 30; n++) { const a = Math.random() * Math.PI * 2; spawnParticle('beamSpark', v.x, v.y, Math.cos(a) * 100, Math.sin(a) * 100, 0.5, n % 2 ? '#b06aff' : '#ffffff'); }
-        this.shake = Math.max(this.shake, 2.5); Sound.sfx('impact', 0.8);
-        this.vortices.splice(i, 1);
-      }
+      cr.x = cr.fx = cx; cr.y = cr.fy = cy; cr.t = 1; cr.moving = false; cr.px = cx * TS; cr.py = cy * TS; cr.wait = 0.8;
+      Combat.damage(cr, (3 + F.k * 6) * Combat.power(), 'spark', Math.random() * Math.PI * 2);
+    });
+    if (F.carried.length) {
+      this.shake = Math.max(this.shake, 4); Sound.sfx('impact', 1);
+      this.rings.push({ x, y, r: 4, vr: 160, life: 0.4, max: 0.4, k: 'wings' });
+      for (const cr of m.creatures.slice()) if (Combat.isEnemy(cr) && Math.hypot(cr.px + 4 - x, cr.py + 4 - y) < 22) Combat.damage(cr, 1.5 * Combat.power(), 'spark', Math.atan2(cr.py + 4 - y, cr.px + 4 - x));
+    } else { this.shake = Math.max(this.shake, 1.5); Sound.sfx('impact', 0.4); }
+  },
+  updateSpecials(dt) {
+    const m = game.map;
+    if (this.charging && SPECIALS[this.special()].channel) this.drain(dt);
+    for (let i = this.rockets.length - 1; i >= 0; i--) {
+      const r = this.rockets[i];
+      r.t += dt;
+      if (r.t < 0) continue;
+      // each rocket curls one way and wobbles, so the volley spreads out unpredictably
+      r.a += (r.curl + Math.sin(r.t * 9 + r.wob) * 2.5) * dt;
+      const step = r.sp * dt, nx = r.x + Math.cos(r.a) * step, ny = r.y + Math.sin(r.a) * step;
+      const tx = Math.floor(nx / TS), ty = Math.floor(ny / TS);
+      r.left -= step;
+      const wall = !m.inb(tx, ty) || (m.solid[ty * m.w + tx] && !m.water[ty * m.w + tx]);
+      const touch = m.creatures.some((cr) => Combat.isEnemy(cr) && Math.hypot(cr.px + 4 - nx, cr.py + 4 - ny) < 5 + (cr.r ? cr.r - 6 : 0));
+      if (wall || touch || r.left <= 0) { this.burst(wall ? r.x : nx, wall ? r.y : ny, r.col, r.dmg); this.rockets.splice(i, 1); continue; }
+      r.x = nx; r.y = ny;
+      if (Math.random() < 0.6) spawnParticle('beamSpark', r.x, r.y, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, 0.35, Math.random() < 0.5 ? r.col : '#fff0c0');
     }
     for (let i = this.meteors.length - 1; i >= 0; i--) {
       const s = this.meteors[i];
@@ -274,16 +377,30 @@ const Powers = {
       if (P.t <= 0 || P.map !== game.map) this.endPossess();
     }
   },
-  // drawing for specials: vortices, falling stars, shadow trails, aim previews
+  // drawing for specials: rockets, wings, falling stars, shadow trails, aim previews
   renderSpecials(px, L, t) {
-    for (const v of this.vortices) {
-      const f = Math.min(1, v.life / 0.4, (v.max - v.life) / 0.3 + 0.2);
-      for (let arm = 0; arm < 4; arm++) for (let s = 0; s < 24; s++) {
-        const rr = v.r * (s / 24), a = v.a + arm * Math.PI / 2 + s * 0.32;
-        px(v.x + Math.cos(a) * rr, v.y + Math.sin(a) * rr * 0.8, s % 3 ? '#b06aff' : '#f0e0ff', f * (0.4 + 0.6 * s / 24));
-      }
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) px(v.x + dx, v.y + dy, '#1a0a2a', f, 0);
-      L.push({ x: v.x, y: v.y, rgb: SPECIALS.vortex.rgb, r: v.r + 16, i: 1.1 * f });
+    for (const r of this.rockets) {
+      if (r.t < 0) continue;
+      px(r.x, r.y, '#ffffff', 1); px(r.x - Math.cos(r.a) * 1.5, r.y - Math.sin(r.a) * 1.5, r.col, 1);
+      L.push({ x: r.x, y: r.y, rgb: hexToRgb(r.col), r: 14, i: 0.8 });
+    }
+    if (this.flight) {
+      // a shadow on the ground and a pair of beating wings
+      const F = this.flight, p = game.player, gx = p.px + 4, gy = p.py + 8, wy = p.py + 4 - F.h;
+      for (let i = -3; i <= 3; i++) px(gx + i, gy, '#000000', 0.45, 0);
+      const flap = Math.sin(t * 22) * 2.5, side = (s) => {
+        for (let k = 0; k < 7; k++) {
+          const wx = gx + s * (3 + k), top = wy - 2 - Math.round(flap * (k / 6)) - Math.round(k * 0.5);
+          for (let j = 0; j < Math.max(1, 4 - (k >> 1)); j++) px(wx, top + j, j ? '#c8d8f0' : '#ffffff', 0.95);
+        }
+      };
+      side(-1); side(1);
+      L.push({ x: gx, y: wy, rgb: [232, 244, 255], r: 30, i: 0.9 });
+    }
+    if (this.charging && SPECIALS[this.special()].channel) {
+      // the reach of the drain, a slow ring of red
+      const [x, y] = this.center(game.player), n = 40;
+      for (let k = 0; k < n; k++) { if ((k + Math.floor(t * 8)) % 4 === 0) continue; const a = (k / n) * Math.PI * 2; px(x + Math.cos(a) * 5 * TS, y + Math.sin(a) * 5 * TS * 0.8, '#ff4a6a', 0.45); }
     }
     for (const s of this.meteors) {
       // a blinking mark on the ground, then the star streaking down onto it
@@ -308,13 +425,13 @@ const Powers = {
     }
     // while channelling a special, preview where it will land
     const sp = this.special();
-    if (this.charging && sp !== 'beam') {
+    if (this.charging && sp !== 'beam' && !SPECIALS[sp].channel) {
       const c = Math.max(0.33, this.charge), T = this.target(sp, c), col = this.color(sp), ready = this.charge >= 0.33;
-      if (sp === 'shadow') {
+      if (sp === 'shadow' || sp === 'wings') {
         const [x0, y0] = this.center(game.player), len = Math.hypot(T.x - x0, T.y - y0);
         for (let d = 6; d < len; d += 4) px(x0 + (T.x - x0) * d / len, y0 + (T.y - y0) * d / len, col, ready ? 0.7 : 0.3);
       }
-      const r = sp === 'shadow' ? 6 : T.r, n = Math.max(12, Math.round(r * 1.6));
+      const r = sp === 'shadow' || sp === 'wings' ? 6 : T.r, n = Math.max(12, Math.round(r * 1.6));
       for (let k = 0; k < n; k++) {
         if ((k + Math.floor(t * 12)) % 3 === 0) continue;
         const a = (k / n) * Math.PI * 2;

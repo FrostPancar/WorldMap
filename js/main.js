@@ -220,7 +220,8 @@ function update(dt) {
     const le = m.entr.get(ny * m.w + nx);
     return !(Combat.isLocked(le) && !Combat.tryUnlock(le, nx, ny));
   };
-  const arrived = p.update(dt, m, dir, input.run || input.touchRun);
+  // in the air (wings) you glide freely over everything instead of walking
+  const arrived = Powers.flight ? (Powers.updateFlight(dt, game.pending ? null : input.dir()), false) : p.update(dt, m, dir, input.run || input.touchRun);
   if (arrived) {
     if (m === game.world.map) MapView.reveal(p.x, p.y, 13);
     const e = m.entr.get(p.y * m.w + p.x);
@@ -399,7 +400,7 @@ function renderWorld(S, L, E, P) {
     const d = GLYPHS[c.g];
     const lift = (d.tags.includes('center') ? (d.h - TS) >> 1 : d.h - TS) + (d.tags.includes('float') ? 3 + Math.round(Math.sin(t * 2.2 + c.ph) * 2) : 0);
     // wide sprites (bosses) stay centred on their tile
-    const px = Math.round(c.px - ox) - ((d.w - TS) >> 1) + (c.hitT > 0 ? Math.round(Math.sin(t * 70 + c.ph)) : 0), py = Math.round(c.py - oy) - lift - (c.hitT > 0.15 ? 1 : 0);
+    const px = Math.round(c.px - ox) - ((d.w - TS) >> 1) + (c.hitT > 0 ? Math.round(Math.sin(t * 70 + c.ph)) : 0), py = Math.round(c.py - oy) - lift - (c.hitT > 0.15 ? 1 : 0) - Math.round(c.lift || 0);
     if (px < -d.w || py < -d.h || px > v.SW || py > v.SH) continue;
     const fr = c.moving ? Math.floor(c.t * 2) % 2 : (Math.sin(t * 2 + c.ph) > 0.85 ? 1 : 0);
     S.drawImage(spr(c.g, fr, c.flip), px, py);
@@ -429,6 +430,7 @@ function renderWorld(S, L, E, P) {
   const pf0 = p.sprite()[1];
   let [pg, pf, pflip] = Coop.sprite(p.face, pf0, Coop.myColor(), Coop.look.ch, p);
   let ppx = Math.round(p.px - ox) + (p.hitT > 0 ? Math.round(Math.sin(t * 70)) : 0), ppy = Math.round(p.py - oy);
+  if (Powers.flight) ppy -= Math.round(Powers.flight.h);
   if (Powers.possess) {
     // shadow-stepped into a creature: you are drawn as it
     const cr = Powers.possess.c, d = GLYPHS[cr.g];
