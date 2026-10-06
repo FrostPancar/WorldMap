@@ -38,7 +38,13 @@ const input = {
 };
 addEventListener('keydown', (e) => {
   if (e.target && e.target.tagName === 'INPUT') return;
-  if (CoopUI.isOpen() && e.code !== 'Escape') return; // the menu is up: no walking
+  if (CoopUI.isOpen() && e.code !== 'Escape') {
+    // the menu is up: no walking; Q and E flip its pages, M jumps to the map
+    if (!e.repeat && e.code === 'KeyQ') CoopUI.flip(-1);
+    if (!e.repeat && e.code === 'KeyE') CoopUI.flip(1);
+    if (!e.repeat && e.code === 'KeyM' && game.mode !== 'map') { CoopUI.toggle(false); toggleMap(); }
+    return;
+  }
   const d = KEYMAP[e.code];
   if (d) { if (input.order.indexOf(d) < 0) input.order.push(d); e.preventDefault(); }
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') input.run = true;

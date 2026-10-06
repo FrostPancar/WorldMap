@@ -11,7 +11,7 @@ Open `index.html` in a browser. There's no build step, and it works straight fro
 | WASD / arrows | Move (grid-based) |
 | Shift | Run |
 | M / Tab | Toggle the world map |
-| Escape | Menu: resume, restart the world (or start a new one), character, co-op room, sound |
+| Escape | Menu, in three pages flipped with Q / E: Character, Collectibles (opens here) and Settings (sound, restart or new world, co-op room) |
 | Left click | Attack with the equipped weapon toward the cursor (one shot per click) |
 | F | Attack the nearest enemy, or in the direction you're facing |
 | Right mouse / Space (hold) | Channel the selected special and release to cast it |
@@ -46,7 +46,7 @@ Append `?seed=1234` to the URL to generate a different world (the default seed i
   - leaps onto the spot you're standing on
   - summoned minions
 
-  Below half health they enrage and attack more often. They only fight near their lair. If you run off, they walk home and heal. Each one drops a **crystal** with a permanent effect: Grave (health regrows sooner and faster), Prism (specials charge 40% faster), Frost (+4 max health), Ember (+25% damage) and Chrome (move 15% faster, attack 15% faster). The Escape menu shows your crystals in 7 slots. Hover over one to read its effect. Stats and patterns are in `WORLD_BOSSES` in `js/worldbosses.js`.
+  Below half health they enrage and attack more often. They only fight near their lair. If you run off, they walk home and heal. Each one drops a **crystal** with a permanent effect: Grave (health regrows sooner and faster), Prism (specials charge 40% faster), Frost (+4 max health), Ember (+25% damage) and Chrome (move 15% faster, attack 15% faster). The Collectibles page of the Escape menu shows your crystals in 7 slots, plus your specials, the world map (open it with M), keys and weapons. Hover over any of them to read what it does. The menu is drawn in the game's own pixel font and borders, scaled to the window. Stats and patterns are in `WORLD_BOSSES` in `js/worldbosses.js`.
 - **Specials:** every special is channelled. Hold to charge, then release to cast. While you charge a special, its landing spot is previewed. Specials other than the beam need at least a third of a charge, or they fizzle. You start with the beam and learn the rest from traders:
   - **Beam:** the charged beam described under Powers.
   - **Vortex:** a whirlpool at the cursor that drags enemies into its centre, grinds them while it spins, then collapses with a burst. A longer charge makes it bigger, longer-lasting and placeable further away.
@@ -83,5 +83,5 @@ Append `?seed=1234` to the URL to generate a different world (the default seed i
 | `js/bosses.js` | Arena boss sprites, moves and arena interiors |
 | `js/worldbosses.js` | World bosses (procedurally painted 32x32 sprites), their attack patterns and crystals |
 | `js/dreams.js` | Dream themes for interiors |
-| `js/coop.js` | Co-op over MQTT, the Escape menu (restart, character picker, room, sound) |
+| `js/coop.js` | Co-op over MQTT, and the pixel-styled Escape menu (character, collectibles, settings and co-op) |
 | `js/touch.js` | Touch controls |

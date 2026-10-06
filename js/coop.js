@@ -168,154 +168,265 @@ const Coop = {
 };
 
 // ---------------------------------------------------------------------------
-// The Escape menu: resume, restart the world, character, co-op room, sound.
+// The Escape menu, drawn like the game: the 3x5 pixel font, square pixel
+// borders sized to the game's pixel scale, the world palette. Three pages,
+// flipped with Q and E: character, collectibles (opens here), settings/co-op.
 // On touch screens (no Escape key) a small menu button opens it instead.
 // ---------------------------------------------------------------------------
+defGlyph('icon_map', ['11111111', '12221221', '12122321', '12212221', '12322121', '12221221', '11111111', '........'],
+  ['#8a5a2a', '#e8d8b8', '#d8302a'], { emit: [3] });
+
+// a piece of pixel text as a canvas, scaled by CSS to the game's pixel size
+function pxText(str, col, k) {
+  str = String(str).toUpperCase();
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, str.length * 4 - 1); c.height = 5;
+  drawText(c.getContext('2d'), str, 0, 0, col || '#f2f0e8');
+  c.className = 'px';
+  k = k || 1;
+  c.style.width = `calc(var(--px) * ${c.width * k})`; c.style.height = `calc(var(--px) * ${5 * k})`;
+  return c;
+}
+function pxIcon(g, k) {
+  const c = document.createElement('canvas');
+  c.width = 8; c.height = 8; c.className = 'px';
+  if (g) c.getContext('2d').drawImage(spr(g, 0, false), 0, 0);
+  c.style.width = c.style.height = `calc(var(--px) * ${8 * (k || 1)})`;
+  return c;
+}
+
 const CoopUI = {
+  PAGES: ['CHARACTER', 'COLLECTIBLES', 'SETTINGS'],
+  page: 1,
   init(seed) {
     this.seed = seed;
     const css = document.createElement('style');
     css.textContent = `
-      #coop-btn{position:fixed;left:14px;top:14px;width:34px;height:34px;border:1px solid #3a3a46;background:#0b0b10cc;
-        color:#cfcfc4;font:16px monospace;cursor:pointer;border-radius:6px;display:none;align-items:center;justify-content:center;z-index:5;padding:0}
+      #coop-btn{position:fixed;left:14px;top:14px;width:34px;height:34px;border:0;background:#0b0b10;box-shadow:0 0 0 2px #f2f0e8,0 0 0 4px #0b0b10;
+        cursor:pointer;display:none;align-items:center;justify-content:center;z-index:5;padding:0;image-rendering:pixelated}
       body.touch #coop-btn{display:flex}
-      #coop-btn:hover{border-color:#8a8a96}
-      #coop-btn .dot{position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:#555}
-      #coop-panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:260px;max-width:calc(100% - 32px);max-height:calc(100% - 32px);
-        overflow:auto;background:#0b0b10f2;border:1px solid #3a3a46;border-radius:6px;
-        color:#cfcfc4;font:12px/1.4 monospace;padding:14px;z-index:6;display:none;box-sizing:border-box}
+      #coop-btn .dot{position:absolute;top:4px;right:4px;width:4px;height:4px;background:#555}
+      #menu-back{position:fixed;inset:0;z-index:5;display:none;background:#000a}
+      #menu-back.open{display:block}
+      #coop-panel{--px:4px;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;display:none;
+        width:calc(var(--px) * 176);max-width:calc(100% - 24px);max-height:calc(100% - 24px);overflow:auto;box-sizing:border-box;
+        padding:calc(var(--px) * 6);background:#0b0b10;color:#f2f0e8;outline:none;scrollbar-width:none;
+        box-shadow:0 0 0 var(--px) #f2f0e8,0 0 0 calc(var(--px) * 2) #0b0b10,0 0 0 calc(var(--px) * 3) #45454f;
+        background-image:repeating-linear-gradient(0deg,#ffffff06 0 var(--px),transparent var(--px) calc(var(--px) * 2))}
       #coop-panel.open{display:block}
-      #coop-panel h2{margin:0 0 10px;font:600 13px monospace;letter-spacing:.2em;color:#f2f0e8;text-align:center}
-      #coop-panel hr{border:0;border-top:1px solid #2a2a34;margin:12px 0}
-      #coop-panel button.warn{border-color:#6a3a3a;color:#ffb0a0}
-      #menu-crystals{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px}
-      #menu-crystals canvas{display:block;width:100%;height:auto;aspect-ratio:1;image-rendering:pixelated;background:#000;border:1px solid #2a2a34;border-radius:3px;box-sizing:border-box;padding:3px}
-      #menu-crystals canvas.on{border-color:#8a8a96}
-      #menu-crystal-info{color:#8a8a96;min-height:1.4em;font-size:11px}
-      #menu-crystal-info b{color:#f2f0e8;font-weight:normal}
-      #coop-panel button.warn.armed{background:#5a1a1a;border-color:#ff6a5a;color:#fff}
-      #coop-panel label{display:block;color:#8a8a96;margin:0 0 4px}
-      #coop-panel input{width:100%;box-sizing:border-box;background:#000;border:1px solid #3a3a46;color:#f2f0e8;font:13px monospace;
-        padding:6px;border-radius:4px;margin-bottom:8px;text-transform:lowercase}
-      #coop-panel .row{display:flex;gap:6px}
-      #coop-panel button{flex:1;background:#1a1a24;border:1px solid #3a3a46;color:#f2f0e8;font:12px monospace;padding:6px;border-radius:4px;cursor:pointer}
-      #coop-panel button:hover{border-color:#8a8a96}
-      #coop-status{margin-top:8px;color:#8a8a96;display:flex;align-items:center;gap:6px}
-      #coop-panel .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px}
-      #coop-panel .grid canvas{display:block;width:100%;height:auto;aspect-ratio:1;image-rendering:pixelated;background:#000;border:1px solid #2a2a34;border-radius:3px;cursor:pointer;box-sizing:border-box;padding:3px}
-      #coop-panel .grid canvas.on{border-color:#f2f0e8}
-      #coop-panel .sw{display:flex;gap:4px;margin-bottom:10px}
-      #coop-panel .sw span{flex:1;height:14px;border-radius:3px;cursor:pointer;border:1px solid transparent}
-      #coop-panel .sw span.on{border-color:#f2f0e8}
-      #coop-status i{width:7px;height:7px;border-radius:50%;background:#555;display:inline-block}`;
+      #coop-panel canvas.px{display:block;image-rendering:pixelated}
+      #coop-panel .hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:calc(var(--px) * 3)}
+      #coop-panel .key{display:flex;align-items:center;gap:calc(var(--px) * 2);background:none;border:0;padding:0;cursor:pointer}
+      #coop-panel .cap{display:flex;align-items:center;justify-content:center;width:calc(var(--px) * 9);height:calc(var(--px) * 9);
+        background:#1a1a24;box-shadow:inset 0 0 0 var(--px) #9a9aa2,inset 0 calc(var(--px) * -2) 0 #45454f}
+      #coop-panel .key:hover .cap,#coop-panel .key:active .cap{background:#f2f0e8}
+      #coop-panel .title{display:flex;flex-direction:column;align-items:center;gap:calc(var(--px) * 2)}
+      #coop-panel .dots{display:flex;gap:calc(var(--px) * 2)}
+      #coop-panel .dots i{width:calc(var(--px) * 2);height:calc(var(--px) * 2);background:#45454f}
+      #coop-panel .dots i.on{background:#f0b030}
+      #coop-panel .rule{height:var(--px);background:#2a2a34;margin:calc(var(--px) * 3) 0}
+      #coop-panel .lbl{margin:calc(var(--px) * 3) 0 calc(var(--px) * 2)}
+      #coop-panel .slots{display:flex;flex-wrap:wrap;gap:calc(var(--px) * 2)}
+      #coop-panel .slot{padding:calc(var(--px) * 2);background:#000;box-shadow:inset 0 0 0 var(--px) #2a2a34;cursor:pointer;line-height:0}
+      #coop-panel .slot.on{box-shadow:inset 0 0 0 var(--px) #9a9aa2}
+      #coop-panel .slot.sel{box-shadow:inset 0 0 0 var(--px) #f0b030}
+      #coop-panel .slot.empty canvas{opacity:.15}
+      #coop-panel .info{min-height:calc(var(--px) * 12);margin-top:calc(var(--px) * 3);display:flex;flex-direction:column;gap:calc(var(--px) * 2)}
+      #coop-panel .row{display:flex;align-items:center;gap:calc(var(--px) * 3);flex-wrap:wrap}
+      #coop-panel .btn{display:flex;align-items:center;justify-content:center;padding:calc(var(--px) * 3) calc(var(--px) * 4);border:0;cursor:pointer;
+        background:#1a1a24;box-shadow:inset 0 0 0 var(--px) #9a9aa2,inset 0 calc(var(--px) * -2) 0 #45454f}
+      #coop-panel .btn:hover{background:#2c2c3a}
+      #coop-panel .btn.warn{box-shadow:inset 0 0 0 var(--px) #d8323a,inset 0 calc(var(--px) * -2) 0 #9a1f2a}
+      #coop-panel .btn.armed{background:#5a1a1a}
+      #coop-panel .sw{display:flex;gap:calc(var(--px) * 2)}
+      #coop-panel .sw span{width:calc(var(--px) * 10);height:calc(var(--px) * 6);cursor:pointer}
+      #coop-panel .sw span.on{box-shadow:0 0 0 var(--px) #0b0b10,0 0 0 calc(var(--px) * 2) #f2f0e8}
+      #coop-panel input{width:calc(var(--px) * 70);box-sizing:border-box;background:#000;border:0;color:#f2f0e8;
+        box-shadow:inset 0 0 0 var(--px) #45454f;font:bold calc(var(--px) * 6)/1 monospace;padding:calc(var(--px) * 2) calc(var(--px) * 3);
+        text-transform:uppercase;letter-spacing:calc(var(--px) * .5);outline:none}
+      #coop-panel input:focus{box-shadow:inset 0 0 0 var(--px) #f0b030}
+      #coop-panel .stat{display:flex;align-items:center;gap:calc(var(--px) * 2);margin-top:calc(var(--px) * 3)}
+      #coop-panel .stat i{width:calc(var(--px) * 3);height:calc(var(--px) * 3);background:#555}
+      #coop-panel .foot{margin-top:calc(var(--px) * 4);display:flex;justify-content:center;opacity:.6}`;
     document.head.appendChild(css);
     const btn = document.createElement('button');
-    btn.id = 'coop-btn'; btn.title = 'Co-op'; btn.innerHTML = '&#9881;<span class="dot"></span>';
+    btn.id = 'coop-btn'; btn.title = 'Menu'; btn.appendChild(pxIcon(G.icon_map, 3)); btn.firstChild.style.cssText = 'width:24px;height:24px;image-rendering:pixelated';
+    btn.insertAdjacentHTML('beforeend', '<span class="dot"></span>');
+    const back = document.createElement('div');
+    back.id = 'menu-back';
     const panel = document.createElement('div');
-    panel.id = 'coop-panel';
-    panel.innerHTML = `<h2>MENU</h2>
-      <div class="row"><button id="menu-resume">Resume</button></div>
-      <div class="row" style="margin-top:6px"><button id="menu-restart" class="warn">Restart world</button><button id="menu-new" class="warn">New world</button></div>
-      <hr><label>Crystals</label><div id="menu-crystals"></div><div id="menu-crystal-info"></div>
-      <hr><label>Character</label><div class="grid" id="coop-chars"></div><div class="sw" id="coop-cols"></div>
-      <label for="coop-code">Room</label><input id="coop-code" maxlength="24" spellcheck="false" autocomplete="off">
-      <div class="row"><button id="coop-join">Join</button><button id="coop-copy">Copy link</button></div>
-      <div class="row" style="margin-top:6px"><button id="coop-sound"></button></div>
-      <div id="coop-status"><i></i><span></span></div>`;
-    document.body.append(btn, panel);
-    this.btn = btn; this.panel = panel;
-    const input = panel.querySelector('#coop-code');
-    const q = new URLSearchParams(location.search);
-    input.value = q.get('room') || Math.random().toString(36).slice(2, 7);
+    panel.id = 'coop-panel'; panel.tabIndex = -1;
+    document.body.append(btn, back, panel);
+    this.btn = btn; this.panel = panel; this.back = back;
     btn.onclick = () => this.toggle();
-    panel.querySelector('#menu-resume').onclick = () => this.toggle(false);
-    // restarting wipes your progress, so each button wants a second click to confirm
-    const confirmBtn = (el, label, fn) => {
-      let armed = 0;
-      el.onclick = () => {
-        if (armed) { fn(); return; }
-        armed = setTimeout(() => { armed = 0; el.textContent = label; el.classList.remove('armed'); }, 2500);
-        el.textContent = 'Sure? Click again'; el.classList.add('armed'); Sound.sfx('ui');
-      };
-    };
-    confirmBtn(panel.querySelector('#menu-restart'), 'Restart world', () => this.restart(this.seed));
-    confirmBtn(panel.querySelector('#menu-new'), 'New world', () => this.restart(Math.floor(Math.random() * 1e9)));
-    this.buildPicker();
-    const join = () => {
-      const code = input.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
-      if (!code) return;
-      input.value = code;
-      history.replaceState(null, '', `?room=${code}&seed=${this.seed}`);
-      Coop.join(code, this.seed);
-      panel.classList.remove('open'); document.getElementById('cvs').focus();
-    };
-    panel.querySelector('#coop-join').onclick = join;
-    const snd = panel.querySelector('#coop-sound');
-    const sndLabel = () => { snd.textContent = Sound.enabled ? 'Sound: on' : 'Sound: off'; };
-    sndLabel();
-    snd.onclick = () => { Sound.start(); Sound.setEnabled(!Sound.enabled); sndLabel(); Sound.sfx('ui'); };
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); if (e.key === 'Escape') this.toggle(false); e.stopPropagation(); });
-    input.addEventListener('keyup', (e) => e.stopPropagation());
-    panel.querySelector('#coop-copy').onclick = (e) => {
-      const code = input.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
-      const url = `${location.origin}${location.pathname}?room=${code}&seed=${this.seed}`;
-      const done = () => { e.target.textContent = 'Copied'; setTimeout(() => { e.target.textContent = 'Copy link'; }, 1200); };
-      if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, () => prompt('Invite link', url));
-      else prompt('Invite link', url);
-    };
-    if (q.get('room')) Coop.join(input.value.trim().toLowerCase(), seed);
-    this.refresh();
+    back.onpointerdown = (e) => { e.preventDefault(); this.toggle(false); };
+    const q = new URLSearchParams(location.search);
+    this.code = q.get('room') || Math.random().toString(36).slice(2, 7);
+    if (q.get('room')) Coop.join(this.code.trim().toLowerCase(), seed);
+    addEventListener('resize', () => this.scale());
   },
-  buildPicker() {
-    const grid = this.panel.querySelector('#coop-chars'), cols = this.panel.querySelector('#coop-cols');
-    grid.innerHTML = ''; cols.innerHTML = '';
+  // one game pixel in CSS pixels, so the menu's pixels match the world's
+  scale() {
+    if (!this.panel) return;
+    // as big as the window comfortably allows (whole pixels keep the font crisp)
+    const px = clamp(Math.min(Math.floor(innerWidth * 0.92 / 190), Math.floor(innerHeight * 0.9 / 150)), 2, 5);
+    this.panel.style.setProperty('--px', px + 'px');
+  },
+  flip(d) { this.page = (this.page + d + 3) % 3; Sound.sfx('ui'); this.build(); },
+  build() {
+    const p = this.panel;
+    p.innerHTML = '';
+    // header: [Q] < PAGE NAME > [E]
+    const hdr = document.createElement('div'); hdr.className = 'hdr';
+    const key = (k, d, arrow) => {
+      const b = document.createElement('button'); b.className = 'key';
+      const cap = document.createElement('span'); cap.className = 'cap'; cap.appendChild(pxText(k, '#f0b030'));
+      const ar = pxText(arrow, '#9a9aa2');
+      if (d < 0) b.append(cap, ar); else b.append(ar, cap);
+      b.onclick = () => this.flip(d);
+      return b;
+    };
+    const title = document.createElement('div'); title.className = 'title';
+    title.appendChild(pxText(this.PAGES[this.page], '#f2f0e8', 2));
+    const dots = document.createElement('div'); dots.className = 'dots';
+    for (let k = 0; k < 3; k++) { const i = document.createElement('i'); if (k === this.page) i.className = 'on'; dots.appendChild(i); }
+    title.appendChild(dots);
+    hdr.append(key('Q', -1, '<'), title, key('E', 1, '>'));
+    p.appendChild(hdr);
+    p.appendChild(Object.assign(document.createElement('div'), { className: 'rule' }));
+    [() => this.buildCharacter(p), () => this.buildCollectibles(p), () => this.buildSettings(p)][this.page]();
+    const foot = document.createElement('div'); foot.className = 'foot';
+    foot.appendChild(pxText('ESC TO CLOSE', '#9a9aa2'));
+    p.appendChild(foot);
+  },
+  label(p, text) { const d = document.createElement('div'); d.className = 'lbl'; d.appendChild(pxText(text, '#9a9aa2')); p.appendChild(d); return d; },
+  button(text, cls, fn) {
+    const b = document.createElement('button'); b.className = 'btn' + (cls ? ' ' + cls : '');
+    b.appendChild(pxText(text)); b.onclick = fn;
+    b.setText = (t) => { b.innerHTML = ''; b.appendChild(pxText(t)); };
+    return b;
+  },
+
+  // --- page 1: character ---------------------------------------------------------------
+  buildCharacter(p) {
+    this.label(p, 'CHOOSE A LOOK');
+    const grid = document.createElement('div'); grid.className = 'slots';
     const c = Coop.myColor();
     CHARS.forEach((n, i) => {
-      const cv = document.createElement('canvas'); cv.width = 8; cv.height = 8;
-      cv.getContext('2d').drawImage(spr(i ? G[`${n}_${c}`] : G['p_down_' + c], 0, false), 0, 0);
-      if (i === Coop.look.ch) cv.className = 'on';
-      cv.onclick = () => this.setLook({ ch: i });
-      grid.appendChild(cv);
+      const s = document.createElement('div'); s.className = 'slot' + (i === Coop.look.ch ? ' sel' : ' on');
+      s.appendChild(pxIcon(i ? G[`${n}_${c}`] : G['p_down_' + c], 2));
+      s.onclick = () => this.setLook({ ch: i });
+      grid.appendChild(s);
     });
+    p.appendChild(grid);
+    this.label(p, 'SCARF COLOUR');
+    const sw = document.createElement('div'); sw.className = 'sw';
     SCARVES.forEach((col, k) => {
       const sp = document.createElement('span'); sp.style.background = col;
       if (k === c) sp.className = 'on';
       sp.onclick = () => this.setLook({ co: k });
-      cols.appendChild(sp);
+      sw.appendChild(sp);
     });
+    p.appendChild(sw);
   },
   setLook(patch) {
     if (patch.co !== undefined && Coop.look.co < 0) Coop.look.co = Coop.myColor();
     Object.assign(Coop.look, patch);
     try { localStorage.setItem('worldmap-look', JSON.stringify(Coop.look)); } catch (e) { /* no storage */ }
-    this.buildPicker();
+    Sound.sfx('ui');
+    if (this.isOpen() && this.page === 0) this.build();
   },
+
+  // --- page 2: collectibles --------------------------------------------------------------
+  buildCollectibles(p) {
+    const info = document.createElement('div'); info.className = 'info';
+    const say = (a, b, col) => { info.innerHTML = ''; info.appendChild(pxText(a, col || '#f2f0e8')); if (b) info.appendChild(pxText(b, '#9a9aa2')); };
+    let selEl = null;
+    const slot = (row, g, on, a, b, col) => {
+      const s = document.createElement('div'); s.className = 'slot' + (on ? ' on' : ' empty');
+      s.appendChild(pxIcon(g, 1));
+      const show = () => { if (selEl) selEl.classList.remove('sel'); selEl = s; s.classList.add('sel'); say(a, b, col); };
+      s.onmouseenter = s.onclick = show;
+      row.appendChild(s);
+      return s;
+    };
+    const row = (text) => { this.label(p, text); const r = document.createElement('div'); r.className = 'slots'; p.appendChild(r); return r; };
+    const r1 = row('CRYSTALS ' + Combat.crystals.length + '/' + CRYSTAL_SLOTS);
+    for (let k = 0; k < CRYSTAL_SLOTS; k++) {
+      const C = CRYSTALS[k], got = Combat.crystals.indexOf(k) >= 0;
+      slot(r1, C ? C.g : CRYSTALS[0].g, got, got ? C.name : '???', got ? C.effect : 'DEFEAT A WORLD BOSS', got ? C.col : '#9a9aa2');
+    }
+    const r2 = row('SPECIALS');
+    for (const k in SPECIALS) {
+      const S = SPECIALS[k], got = Combat.specials.indexOf(k) >= 0;
+      slot(r2, G[S.icon], got, got ? S.name : '???', got ? 'HOLD SPACE TO CHANNEL, E TO SWITCH' : 'TRADE 5 WEAPONS TO LEARN');
+    }
+    const r3 = row('ITEMS');
+    slot(r3, G.icon_map, true, 'WORLD MAP', 'PRESS M TO OPEN', '#e8d8b8');
+    slot(r3, G.key, Combat.keys > 0, 'KEYS X' + Combat.keys, 'OPEN LOCKED DOORS - ARENAS TAKE 2', '#f0b030');
+    const r4 = row('WEAPONS ' + Combat.inv.length);
+    Combat.inv.forEach((id, i) => {
+      const it = ITEMS[id];
+      slot(r4, G['item_' + id], true, it.name + (i === Combat.eq ? ' - HELD' : ''), it.kind + ' - ' + it.el + ' - Q TO SWAP', ELEMENTS[it.el].col);
+    });
+    p.appendChild(info);
+    say('LEVEL ' + Combat.level(), 'HOVER OVER AN ITEM TO READ IT');
+  },
+
+  // --- page 3: settings and co-op ------------------------------------------------------
+  buildSettings(p) {
+    this.label(p, 'SETTINGS');
+    const r = document.createElement('div'); r.className = 'row';
+    const snd = this.button(Sound.enabled ? 'SOUND ON' : 'SOUND OFF', '', () => { Sound.start(); Sound.setEnabled(!Sound.enabled); snd.setText(Sound.enabled ? 'SOUND ON' : 'SOUND OFF'); Sound.sfx('ui'); });
+    r.appendChild(snd);
+    // restarting wipes your progress, so each button wants a second click to confirm
+    const confirmBtn = (label, fn) => {
+      let armed = 0;
+      const b = this.button(label, 'warn', () => {
+        if (armed) { fn(); return; }
+        armed = setTimeout(() => { armed = 0; b.setText(label); b.classList.remove('armed'); }, 2500);
+        b.setText('SURE? CLICK AGAIN'); b.classList.add('armed'); Sound.sfx('ui');
+      });
+      return b;
+    };
+    r.append(confirmBtn('RESTART WORLD', () => this.restart(this.seed)), confirmBtn('NEW WORLD', () => this.restart(Math.floor(Math.random() * 1e9))));
+    p.appendChild(r);
+    this.label(p, 'CO-OP ROOM');
+    const r2 = document.createElement('div'); r2.className = 'row';
+    const input = document.createElement('input');
+    input.maxLength = 24; input.spellcheck = false; input.autocomplete = 'off'; input.value = this.code;
+    const join = () => {
+      const code = input.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+      if (!code) return;
+      this.code = code; input.value = code;
+      history.replaceState(null, '', `?room=${code}&seed=${this.seed}`);
+      Coop.join(code, this.seed);
+      this.refresh();
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); if (e.key === 'Escape') this.toggle(false); e.stopPropagation(); });
+    input.addEventListener('keyup', (e) => e.stopPropagation());
+    input.addEventListener('input', () => { this.code = input.value; });
+    const copy = this.button('COPY LINK', '', () => {
+      const code = input.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+      const url = `${location.origin}${location.pathname}?room=${code}&seed=${this.seed}`;
+      const done = () => { copy.setText('COPIED'); setTimeout(() => copy.setText('COPY LINK'), 1200); };
+      if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, () => prompt('Invite link', url));
+      else prompt('Invite link', url);
+    });
+    r2.append(input, this.button('JOIN', '', join), copy);
+    p.appendChild(r2);
+    this.stat = document.createElement('div'); this.stat.className = 'stat';
+    p.appendChild(this.stat);
+    this.refresh();
+  },
+
   toggle(open) {
     const p = this.panel;
     if (!p) return;
     if (open === undefined) open = !p.classList.contains('open');
-    p.classList.toggle('open', open);
+    p.classList.toggle('open', open); this.back.classList.toggle('open', open);
     Sound.sfx('ui');
-    if (open) { this.buildCrystals(); p.querySelector('#menu-resume').focus(); } else document.getElementById('cvs').focus();
-  },
-  // seven slots; each beaten world boss fills one with its crystal
-  buildCrystals() {
-    const box = this.panel.querySelector('#menu-crystals'), info = this.panel.querySelector('#menu-crystal-info');
-    box.innerHTML = '';
-    const got = Combat.crystals;
-    const show = (k) => {
-      if (k < 0) { info.textContent = got.length ? got.length + ' / ' + CRYSTAL_SLOTS + ' found' : 'Defeat world bosses to collect crystals'; return; }
-      const C = CRYSTALS[k];
-      info.innerHTML = got.indexOf(k) >= 0 ? `<b>${C.name}</b> - ${C.effect}` : 'Not found yet';
-    };
-    for (let k = 0; k < CRYSTAL_SLOTS; k++) {
-      const cv = document.createElement('canvas'); cv.width = 8; cv.height = 8;
-      if (got.indexOf(k) >= 0) { cv.getContext('2d').drawImage(spr(CRYSTALS[k].g, 0, false), 0, 0); cv.className = 'on'; }
-      cv.onmouseenter = cv.onclick = () => show(got.indexOf(k) >= 0 ? k : CRYSTALS[k] ? k : -1);
-      cv.onmouseleave = () => show(-1);
-      box.appendChild(cv);
-    }
-    show(-1);
+    if (open) { this.page = 1; this.scale(); this.build(); p.focus(); } else document.getElementById('cvs').focus();
   },
   isOpen() { return !!(this.panel && this.panel.classList.contains('open')); },
   // start over: forget items, XP, keys, specials, beaten bosses and unlocked doors
@@ -331,17 +442,20 @@ const CoopUI = {
   go(code, seed) { location.search = `?room=${code}&seed=${seed}`; },
   refresh() {
     if (!this.panel) return;
-    if (Coop.self !== this.pickerSelf) { this.pickerSelf = Coop.self; this.buildPicker(); }
     const n = Coop.peers.size + 1;
     const [col, text] = {
-      solo: ['#555', 'Solo — pick a room and join'],
-      connecting: ['#e8b040', 'Connecting…'],
-      joined: ['#5ae070', n > 1 ? `${n} explorers here` : 'In room — waiting for friends'],
-      offline: ['#e05050', 'Can’t reach co-op servers — retrying'],
+      solo: ['#555', 'SOLO - PICK A ROOM AND JOIN'],
+      connecting: ['#e8b040', 'CONNECTING...'],
+      joined: ['#5ae070', n > 1 ? n + ' EXPLORERS HERE' : 'IN ROOM - WAITING FOR FRIENDS'],
+      offline: ['#e05050', 'CAN\'T REACH CO-OP SERVERS - RETRYING'],
     }[Coop.status];
-    this.panel.querySelector('#coop-status i').style.background = col;
-    this.panel.querySelector('#coop-status span').textContent = text;
     this.btn.querySelector('.dot').style.background = col;
+    if (this.stat && this.stat.isConnected) {
+      this.stat.innerHTML = '';
+      const i = document.createElement('i'); i.style.background = col;
+      this.stat.append(i, pxText(text, '#9a9aa2'));
+    }
+    if (Coop.self !== this.pickerSelf) { this.pickerSelf = Coop.self; if (this.isOpen() && this.page === 0) this.build(); }
   },
 };
 
