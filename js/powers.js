@@ -90,20 +90,14 @@ const Powers = {
         spawnParticle('beamSpark', x1, y1, Math.cos(pa) * sp, Math.sin(pa) * sp, 0.3 + Math.random() * 0.4, this.color(k));
       }
     }
-    // knock back creatures caught in the beam
-    for (const cr of m.creatures) {
+    // the beam hurts enemies along its length
+    for (const cr of m.creatures.slice()) {
+      if (!Combat.isEnemy(cr)) continue;
       const cx = cr.px + 4, cy = cr.py + 4;
       const t = clamp(((cx - x0) * ca + (cy - y0) * sa) / d, 0, 1);
       const dx = x0 + ca * d * t - cx, dy = y0 + sa * d * t - cy;
-      if (dx * dx + dy * dy > 36) continue;
-      cr.flash = 0.5;
-      const sx = Math.abs(ca) > Math.abs(sa) ? Math.sign(ca) : 0, sy = sx ? 0 : Math.sign(sa);
-      const nx = cr.x + sx, ny = cr.y + sy;
-      if (!cr.moving && !m.blocked(nx, ny) && !m.entr.has(ny * m.w + nx)) {
-        cr.fx = cr.x; cr.fy = cr.y; cr.x = nx; cr.y = ny; cr.t = 0; cr.moving = true; cr.wait = 0.2;
-      }
-      for (let n = 0; n < 6; n++) spawnParticle('beamSpark', cx, cy, (Math.random() - 0.5) * 50, (Math.random() - 0.5) * 50, 0.4, this.color(k));
-      Sound.sfx('hit');
+      if (dx * dx + dy * dy > 36 + w * 9) continue;
+      Combat.damage(cr, (2 + c * 8) * (owner === game.player ? Combat.power() : 0.5), k, a);
     }
   },
 
@@ -301,10 +295,6 @@ function seedInteriorOrb(m, theme, seed) {
 }
 
 // --- input bindings -------------------------------------------------------------------------------
-cvs.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || game.mode !== 'world') return;
-  Powers.startCharge(Powers.aimFromEvent(e));
-});
 addEventListener('pointermove', (e) => { if (Powers.charging && Powers.aim) Powers.aim = Powers.aimFromEvent(e); });
 addEventListener('pointerup', () => Powers.release());
 addEventListener('pointercancel', () => Powers.release());

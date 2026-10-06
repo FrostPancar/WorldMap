@@ -12,8 +12,11 @@ Open `index.html` in a browser. There's no build step, and it works straight fro
 | Shift | Run |
 | M / Tab | Toggle the world map |
 | Escape | Co-op and character menu |
-| Click / hold mouse | Charge a beam and fire it at the cursor (tap fires a small one) |
-| Space (hold) | Charge and fire in the direction you face |
+| Left click | Attack with the equipped weapon toward the cursor (one shot per click) |
+| F | Attack the nearest enemy, or in the direction you're facing |
+| Right mouse / Space (hold) | Charge the special ability (the beam) and release to fire |
+| Q | Swap between weapons you've collected |
+| E | Cycle special abilities (only the beam so far) |
 | Map: WASD / drag | Pan |
 | Map: Q / E, mouse wheel | Zoom out / in |
 | Map: Space | Re-centre on the player |
@@ -31,6 +34,8 @@ Append `?seed=1234` to the URL to generate a different world (the default seed i
 - **Interiors:** cellular-automata caves and mines (with rails to the treasure), room-and-corridor dungeons and crypts, and hand-shaped houses, throne rooms, lighthouses, ship holds, witch huts, fire temples, tree hollows, temples and wizard towers. Caves, mines, dungeons and crypts each go three levels deeper through a glowing stairway, getting darker as you go.
 - **Dream interiors:** every indoor space is re-dressed in one of 16 surreal themes, in the spirit of Yume Nikki. Each theme brings its own patterned floor, re-skinned walls, framed pixel paintings after public-domain works (Mona Lisa, The Starry Night, The Great Wave, Red Fuji, The Scream, Mondrian, Klimt's The Kiss), centrepieces (Moai, a torii gate, a pyramid, a maneki-neko, a sugar skull, a Greek bust, a giant blinking eye, a melting clock), props (Tokyo vending machines, a London phone box, Paris street lamps, chess pieces, marigolds, floating hats and apples), dream-dwellers, particles and a screen effect (warping, hue drift, sepia). The theme is fixed per entrance, so co-op players share the same dream. Exits stay shut for the first 2 seconds in a space.
 - **Powers:** glowing orbs sit near shrines, stone circles, the world tree, volcano shrines and other landmarks, and in about half of the interiors. Walking into one absorbs it (particles arc into you) and changes your power: spark, ember, frost, void, bloom or prism. Holding the button charges a beam, drawn with arced particles spiralling in, then releasing fires it. Beams stop at walls, scatter sparks, shake the screen and knock creatures back. Co-op friends see each other's charge and beams. The `POWERS` table in `js/powers.js` is the place to add future power-up effects.
+- **Combat:** spiders, bats, ghosts, slimes, eyeballs, shadows, TV-heads, chess knights and dragons are enemies. They have HP (more on deeper levels), chase you, show a health bar when hurt and drop XP gems that home in on you. XP raises your level and damage. Walking into a friendly animal makes it show a heart and become a pet that follows you from place to place and shoots heart projectiles at enemies, using your weapon's element.
+- **Weapons:** 22 items in `ITEMS` in `js/combat.js`: slings (lobbed, arcing pellets), swords and a Moai hammer (melee sweeps), bows, guns and blunderbusses, homing wands, and boomerang watches. Each has an element (ember burns, frost slows, void pierces, bloom splits into seeds, prism bounces between enemies). They sit on pedestals at ruins, stone circles, towers and other landmarks and in some dream rooms, and in every chest (bump a chest to open it). Each place favours items that suit it.
 - **Sound:** all synthesised in the browser. A generative ambient score (pads, drone and bell melodies) changes with day and night, the biome you're in and each dream theme. Sound effects cover footsteps, doors, the map, absorbing, charging, beams and impacts. Toggle it in the ⚙ menu.
 - **Life:** creatures that wander their home biome, plus fireflies, wisps, spores, embers, snow and water twinkles.
 - **Lighting and post effects:** a day/night cycle, per-biome ambience, flickering point lights with Bayer-dithered falloff, an emissive glow layer, two-scale bloom, chromatic fringing, scanlines, vignette, slight curvature, grain and dithered transitions.

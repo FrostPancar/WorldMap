@@ -8,6 +8,12 @@ const cvs = document.getElementById('cvs');
 const post = new Post(cvs);
 const ctx2d = post.ok ? null : cvs.getContext('2d');
 
+const hudCvs = document.createElement('canvas');
+hudCvs.id = 'hud';
+hudCvs.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;image-rendering:pixelated;z-index:3';
+document.body.appendChild(hudCvs);
+const hudCtx = hudCvs.getContext('2d');
+const NULLCTX = { fillRect() {}, drawImage() {}, fillStyle: '', globalAlpha: 1 };
 const layers = {};
 for (const k of ['scene', 'light', 'emit']) {
   const c = document.createElement('canvas');
@@ -76,6 +82,8 @@ function resize() {
     layers[k].ctx.imageSmoothingEnabled = false;
   }
   post.resize(SW, SH);
+  hudCvs.width = Math.ceil(VW); hudCvs.height = Math.ceil(VH);
+  hudCvs.style.width = (Math.ceil(VW) * scale / dpr) + 'px'; hudCvs.style.height = (Math.ceil(VH) * scale / dpr) + 'px';
 }
 addEventListener('resize', resize);
 
@@ -102,6 +110,7 @@ function enterInterior(ent) {
   fadeTo(() => {
     let im = game.interiors.get(ent.id);
     if (!im) { im = genInterior(ent); game.interiors.set(ent.id, im); }
+    Combat.carryPets(game.map, im, im.spawn.x, im.spawn.y);
     game.stack.push(back);
     game.ret = ent; game.map = im;
     game.lockUntil = game.time + 2 + 1 / game.fadeSpeed; // no leaving for 2s once the room is visible
@@ -114,6 +123,7 @@ function exitInterior() {
   Sound.sfx('exit');
   fadeTo(() => {
     const back = game.stack.pop() || { map: game.world.map, x: game.world.start.x, y: game.world.start.y, ent: null };
+    Combat.carryPets(game.map, back.map, back.x, back.y);
     game.map = back.map; game.ret = back.ent;
     game.lockUntil = back.map === game.world.map ? 0 : game.time + 2 + 1 / game.fadeSpeed;
     game.player.place(back.x, back.y); game.player.face = 'down';
@@ -184,6 +194,7 @@ function update(dt) {
     const [dx, dy] = DIRS[dir];
     if (m.entr.has((p.y + dy) * m.w + p.x + dx) || m.entr.has((p.ty + dy) * m.w + p.tx + dx)) { if (!p.moving) p.face = dir; dir = null; }
   }
+  if (dir && !p.moving) { const [bx, by] = DIRS[dir]; if (m.inb(p.x + bx, p.y + by)) Combat.tryOpen(p.x + bx, p.y + by); }
   const arrived = p.update(dt, m, dir, input.run || input.touchRun);
   if (arrived) {
     if (m === game.world.map) MapView.reveal(p.x, p.y, 13);
@@ -194,6 +205,7 @@ function update(dt) {
   }
   Coop.update(dt, p);
   Powers.update(dt);
+  Combat.update(dt);
   const lim = 44;
   for (const c of m.creatures) {
     if (Math.abs(c.x - p.x) > lim || Math.abs(c.y - p.y) > lim) continue;
@@ -282,6 +294,8 @@ function render() {
     const fx = game.map.dream && game.map.dream.fx;
     if (fx) { P.warp = fx.warp || 0; P.hue = fx.hue || 0; P.mono = fx.mono || 0; if (fx.ca) P.ca = 0.38 * (1 + fx.ca); }
   }
+  hudCtx.clearRect(0, 0, hudCvs.width, hudCvs.height);
+  if (game.mode !== 'map') Combat.hud(hudCtx, NULLCTX, v.VW);
   if (post.ok) post.render(layers.scene.c, layers.light.c, layers.emit.c, P);
   else {
     ctx2d.imageSmoothingEnabled = false;
@@ -355,6 +369,7 @@ function renderWorld(S, L, E, P) {
   E.globalAlpha = 0.22; E.drawImage(spr(pg, pf, pflip), ppx, ppy); E.globalAlpha = 1;
 
   Powers.render(S, E, ox, oy, v.SW, v.SH, t);
+  Combat.render(S, E, ox, oy, v.SW, v.SH, t, Powers.lights);
   drawParticles(S, E, ox, oy, v.SW, v.SH, t);
 
   // lighting
@@ -413,6 +428,7 @@ function boot() {
   game.map = game.world.map;
   MapView.init(game.world);
   seedOverworldOrbs(game.world, seed);
+  seedOverworldItems(game.world, seed);
   game.player.place(game.world.start.x, game.world.start.y);
   MapView.reveal(game.player.x, game.player.y, 13);
   snapCamera();

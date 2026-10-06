@@ -14,27 +14,38 @@ function makeCreature(name, x, y, biome, R) {
 }
 
 function updateCreature(c, m, dt, pl) {
+  // pets follow the player, enemies chase when close, everything else wanders
+  const pdx = pl.x - c.x, pdy = pl.y - c.y, pd = Math.abs(pdx) + Math.abs(pdy);
+  const chase = c.enemy && pd < 7, follow = c.pet && pd > 2;
+  const speed = (c.pet ? 7 : chase ? 3.6 : c.speed) * (c.slow > 0 ? 0.4 : 1);
   if (c.moving) {
-    c.t += dt * c.speed;
-    if (c.t >= 1) { c.t = 1; c.moving = false; c.wait = 0.2 + Math.random() * (Math.random() < 0.3 ? 4 : 1.2); }
+    c.t += dt * speed;
+    if (c.t >= 1) { c.t = 1; c.moving = false; c.wait = (chase || follow) ? 0.05 : 0.2 + Math.random() * (Math.random() < 0.3 ? 4 : 1.2); }
   } else {
     c.wait -= dt;
-    if (c.wait <= 0) {
-      let dx = 0, dy = 0;
-      const ax = c.x - pl.x, ay = c.y - pl.y;
-      if (Math.abs(ax) + Math.abs(ay) < 4 && Math.random() < 0.85) {
-        if (Math.abs(ax) > Math.abs(ay) || (ax !== 0 && Math.random() < 0.5)) dx = Math.sign(ax) || 1; else dy = Math.sign(ay) || 1;
-      } else {
+    if (c.pet && pd > 14) { // a pet left far behind catches up
+      c.x = c.fx = pl.x; c.y = c.fy = pl.y + (m.blocked(pl.x, pl.y + 1) ? 0 : 1);
+    } else if (c.wait <= 0) {
+      const tries = [];
+      if (chase || follow) {
+        const sx = Math.sign(pdx), sy = Math.sign(pdy);
+        if (Math.abs(pdx) >= Math.abs(pdy)) { if (sx) tries.push([sx, 0]); if (sy) tries.push([0, sy]); }
+        else { if (sy) tries.push([0, sy]); if (sx) tries.push([sx, 0]); }
+      } else if (!c.pet) {
         const k = Math.floor(Math.random() * 4);
-        dx = [0, 1, 0, -1][k]; dy = [-1, 0, 1, 0][k];
+        tries.push([[0, 1, 0, -1][k], [-1, 0, 1, 0][k]]);
       }
-      const nx = c.x + dx, ny = c.y + dy, ni = ny * m.w + nx;
-      const ok = !m.blocked(nx, ny) && !m.entr.has(ni) && (c.biome < 0 || m.biome[ni] === c.biome) &&
-        !(nx === pl.x && ny === pl.y) && !(nx === pl.tx && ny === pl.ty);
-      if (ok) {
+      let moved = false;
+      for (const [dx, dy] of tries) {
+        const nx = c.x + dx, ny = c.y + dy, ni = ny * m.w + nx;
+        const ok = !m.blocked(nx, ny) && !m.entr.has(ni) && (c.biome < 0 || chase || m.biome[ni] === c.biome) &&
+          !(nx === pl.x && ny === pl.y) && !(nx === pl.tx && ny === pl.ty);
+        if (!ok) continue;
         c.fx = c.x; c.fy = c.y; c.x = nx; c.y = ny; c.t = 0; c.moving = true;
         if (dx) c.flip = dx < 0;
-      } else c.wait = 0.3 + Math.random();
+        moved = true; break;
+      }
+      if (!moved) c.wait = (chase || follow) ? 0.25 : 0.3 + Math.random();
     }
   }
   const t = c.moving ? c.t : 1;

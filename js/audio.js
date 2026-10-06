@@ -207,6 +207,22 @@ const Sound = {
       case 'impact':
         this.noiseHit(t, 'lowpass', 1800, 120, 0.12 + (k || 0) * 0.15, 0.35, 0.8, 0.5);
         this.tone(t, 'sine', 90, 40, 0.12 + (k || 0) * 0.15, 0.003, 0.3); break;
+      case 'shot': {
+        const kind = k;
+        if (kind === 'sword') this.noiseHit(t, 'bandpass', 800, 3000, 0.1, 0.12, 2, 0.2);
+        else if (kind === 'gun') { this.noiseHit(t, 'lowpass', 3000, 300, 0.14, 0.12, 0.8, 0.3); this.tone(t, 'square', 220, 60, 0.06, 0.002, 0.1); }
+        else if (kind === 'bow') this.tone(t, 'triangle', 900, 300, 0.06, 0.002, 0.12, 0.2);
+        else if (kind === 'wand' || kind === 'watch') this.tone(t, 'sine', 700, 1400, 0.06, 0.005, 0.25, 0.6);
+        else this.tone(t, 'triangle', 500, 900, 0.06, 0.002, 0.1, 0.2);
+        break;
+      }
+      case 'kill':
+        this.noiseHit(t, 'bandpass', 2000, 200, 0.12, 0.3, 1.5, 0.4); this.tone(t, 'square', 440, 110, 0.06, 0.003, 0.25, 0.3); break;
+      case 'gem': this.tone(t, 'sine', 1200 + Math.random() * 400, 0, 0.04, 0.002, 0.12, 0.5); break;
+      case 'levelup': [0, 4, 7, 12, 16].forEach((s, i) => this.tone(t + i * 0.08, 'triangle', 523 * Math.pow(2, s / 12), 0, 0.08, 0.005, 0.4, 0.8)); break;
+      case 'chest': this.tone(t, 'triangle', 392, 0, 0.08, 0.005, 0.3, 0.6); this.tone(t + 0.1, 'triangle', 587, 0, 0.08, 0.005, 0.5, 0.7); break;
+      case 'heart': this.tone(t, 'sine', 880, 0, 0.06, 0.005, 0.25, 0.7); this.tone(t + 0.1, 'sine', 1175, 0, 0.06, 0.005, 0.35, 0.7); break;
+      case 'hurt': this.tone(t, 'sawtooth', 180, 70, 0.1, 0.003, 0.2, 0.2); break;
       case 'hit':
         this.tone(t, 'square', 900, 300, 0.05, 0.002, 0.12, 0.3); break;
     }

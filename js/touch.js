@@ -23,8 +23,12 @@ const Touch = {
         background:#14141ccc;border:1px solid #ffffff2a;color:#cfcfc4;font:600 calc(var(--btn)*.24)/1 monospace;
         display:flex;align-items:center;justify-content:center;letter-spacing:.04em}
       .tbtn.on{background:#f2f0e8;color:#0b0b10}
-      #t-run{right:calc(20px + env(safe-area-inset-right));bottom:calc(22px + env(safe-area-inset-bottom))}
-      #t-map{right:calc(30px + var(--btn) + env(safe-area-inset-right));bottom:calc(22px + var(--btn) * .7 + env(safe-area-inset-bottom))}
+      #t-atk{right:calc(20px + env(safe-area-inset-right));bottom:calc(22px + env(safe-area-inset-bottom));font-size:calc(var(--btn)*.4);color:#ffd890;border-color:#ffd89055}
+      #t-atk.on{background:#ffd890;color:#0b0b10}
+      #t-run{right:calc(30px + var(--btn) + env(safe-area-inset-right));bottom:calc(22px + env(safe-area-inset-bottom))}
+      #t-map{right:calc(30px + var(--btn) + env(safe-area-inset-right));bottom:calc(32px + var(--btn) + env(safe-area-inset-bottom))}
+      #t-swap{right:calc(20px + env(safe-area-inset-right));bottom:calc(42px + var(--btn) * 2 + env(safe-area-inset-bottom));font-size:calc(var(--btn)*.34)}
+      body.touch.mapmode #t-atk,body.touch.mapmode #t-swap{display:none}
       #t-beam{right:calc(20px + env(safe-area-inset-right));bottom:calc(32px + var(--btn) + env(safe-area-inset-bottom));
         font-size:calc(var(--btn)*.42);color:#9ad8ff;border-color:#9ad8ff55}
       #t-beam.on{background:#9ad8ff;color:#0b0b10}
@@ -43,7 +47,7 @@ const Touch = {
     const root = document.createElement('div');
     root.id = 'touch';
     root.innerHTML = `<div id="dpad"><i class="up">▲</i><i class="down">▼</i><i class="left">◀</i><i class="right">▶</i></div>
-      <div class="tbtn" id="t-beam">✦</div><div class="tbtn" id="t-run">RUN</div><div class="tbtn" id="t-map">MAP</div>
+      <div class="tbtn" id="t-atk">⚔</div><div class="tbtn" id="t-swap">⇄</div><div class="tbtn" id="t-beam">✦</div><div class="tbtn" id="t-run">RUN</div><div class="tbtn" id="t-map">MAP</div>
       <div class="tbtn" id="t-zin">+</div><div class="tbtn" id="t-zout">−</div>`;
     document.body.appendChild(root);
     this.pad = root.querySelector('#dpad');
@@ -69,6 +73,9 @@ const Touch = {
     run.addEventListener('pointerdown', (e) => { e.preventDefault(); input.touchRun = !input.touchRun; run.classList.toggle('on', input.touchRun); });
     const tap = (id, fn) => root.querySelector(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
     tap('#t-map', () => toggleMap());
+    tap('#t-swap', () => Combat.cycle(1));
+    const atk = root.querySelector('#t-atk');
+    atk.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); atk.classList.add('on'); Combat.attack(null); setTimeout(() => atk.classList.remove('on'), 120); });
     const beam = root.querySelector('#t-beam');
     beam.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); beam.classList.add('on'); Powers.startCharge(null); });
     const fire = () => { beam.classList.remove('on'); Powers.release(); };
