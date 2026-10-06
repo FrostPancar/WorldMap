@@ -57,7 +57,7 @@ const Coop = {
     let room = null;
     try { room = await window.claude.use('room'); } catch (e) { room = null; }
     if (!room || this.status !== 'solo') return false;
-    this.room = room; this.status = 'joined';
+    this.room = room; this.status = 'joined'; this.artifact = true;
     this.sendFn = (st) => room.presence(st).catch(() => {});
     room.onPeers((ch) => {
       const ids = new Set();
@@ -71,98 +71,45 @@ const Coop = {
     return true;
   },
 
-  // --- WebRTC rooms (PeerJS) -----------------------------------------------
+  // --- MQTT relay rooms -----------------------------------------------------
+  // Every player publishes to and subscribes on one topic per room on several
+  // public MQTT-over-WebSocket brokers at once; duplicates are ignored. No
+  // host and no peer-to-peer handshake, so nothing can hang on NAT.
+  BROKERS: ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081/mqtt'],
   join(code, seed) {
-    if (typeof Peer === 'undefined') return;
     this.leave();
-    this.code = code; this.seed = seed; this.status = 'connecting';
-    this.hostId = 'worldmap-v1-' + code.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    this.code = code; this.seed = String(seed); this.status = 'connecting';
+    this.self = this.self || 'p' + Math.random().toString(36).slice(2, 10);
+    this.topic = 'worldmap-v2/' + code.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    this.links = this.BROKERS.map((url) => new MqttLink(url, this.topic, (msg) => this.onMsg(msg), () => this.linkChanged()));
+    this.sendFn = (st) => this.publish({ i: this.self, s: this.seed, st });
+    clearTimeout(this.offT);
+    this.offT = setTimeout(() => { if (this.status === 'connecting') { this.status = 'offline'; CoopUI.refresh(); } }, 12000);
     CoopUI.refresh();
-    this.tryHost();
   },
   leave() {
-    clearTimeout(this.retryT);
-    if (this.peer) { try { this.peer.destroy(); } catch (e) { /* already gone */ } }
-    this.peer = null; this.conns = new Map(); this.hostConn = null;
-    this.peers.clear(); this.room = null; this.sendFn = null; this.status = 'solo';
+    if (this.links) { this.publish({ i: this.self, bye: 1 }); this.links.forEach((l) => l.close()); }
+    this.links = null; this.peers.clear(); this.room = null; this.sendFn = null; this.status = 'solo';
   },
-  retry(ms) {
-    clearTimeout(this.retryT);
-    this.retryT = setTimeout(() => { if (this.code) this.tryHost(); }, ms);
+  publish(obj) {
+    if (!this.links) return;
+    const data = JSON.stringify(obj);
+    for (const l of this.links) l.publish(data);
   },
-  tryHost() {
-    if (this.peer) { try { this.peer.destroy(); } catch (e) { /* ignore */ } }
-    this.conns = new Map(); this.hostConn = null;
-    const peer = new Peer(this.hostId);
-    this.peer = peer;
-    peer.on('open', (id) => {
-      if (this.peer !== peer) return;
-      this.self = id; this.status = 'host'; this.room = true;
-      this.sendFn = (st) => this.broadcast({ t: 's', id: this.self, st });
-      CoopUI.refresh();
-    });
-    peer.on('connection', (conn) => {
-      conn.on('open', () => {
-        this.conns.set(conn.peer, conn);
-        conn.send({ t: 'hello', seed: this.seed });
-        // catch the newcomer up on everyone already here
-        if (this.lastState) conn.send({ t: 's', id: this.self, st: this.lastState });
-        for (const [id, e] of this.peers) if (e.raw) conn.send({ t: 's', id, st: e.raw });
-        CoopUI.refresh();
-      });
-      conn.on('data', (msg) => {
-        if (!msg || msg.t !== 's') return;
-        this.receive(conn.peer, msg.st);
-        const e = this.peers.get(conn.peer); if (e) e.raw = msg.st;
-        this.broadcast({ t: 's', id: conn.peer, st: msg.st }, conn.peer);
-      });
-      const gone = () => { this.conns.delete(conn.peer); this.drop(conn.peer); this.broadcast({ t: 'bye', id: conn.peer }); };
-      conn.on('close', gone); conn.on('error', gone);
-    });
-    peer.on('error', (err) => {
-      if (this.peer !== peer) return;
-      if (err.type === 'unavailable-id') { peer.destroy(); this.becomeClient(); }
-      else if (err.type !== 'peer-unavailable') { this.status = 'connecting'; CoopUI.refresh(); this.retry(3000); }
-    });
-    peer.on('disconnected', () => { if (this.peer === peer && !peer.destroyed) peer.reconnect(); });
+  linkChanged() {
+    const up = this.links && this.links.some((l) => l.ready);
+    this.room = up ? true : null;
+    this.status = up ? 'joined' : (this.status === 'offline' ? 'offline' : 'connecting');
+    if (up) this.lastSent = 0; // announce ourselves right away
+    CoopUI.refresh();
   },
-  becomeClient() {
-    const peer = new Peer();
-    this.peer = peer;
-    peer.on('open', (id) => {
-      if (this.peer !== peer) return;
-      this.self = id;
-      const conn = peer.connect(this.hostId, { serialization: 'json' });
-      this.hostConn = conn;
-      conn.on('open', () => {
-        this.status = 'joined'; this.room = true;
-        this.sendFn = (st) => { if (conn.open) conn.send({ t: 's', st }); };
-        this.last = ''; CoopUI.refresh();
-      });
-      conn.on('data', (msg) => {
-        if (!msg) return;
-        if (msg.t === 'hello' && msg.seed !== undefined && String(msg.seed) !== String(this.seed)) {
-          CoopUI.go(this.code, msg.seed); // the host's world wins
-        } else if (msg.t === 's') this.receive(msg.id, msg.st);
-        else if (msg.t === 'bye') this.drop(msg.id);
-      });
-      const lost = () => {
-        if (this.peer !== peer) return;
-        this.peers.clear(); this.room = null; this.status = 'connecting'; CoopUI.refresh();
-        peer.destroy();
-        this.retry(500 + Math.random() * 1500); // someone takes over as host
-      };
-      conn.on('close', lost); conn.on('error', lost);
-    });
-    peer.on('error', (err) => {
-      if (this.peer !== peer) return;
-      if (err.type === 'peer-unavailable') { peer.destroy(); this.retry(300 + Math.random() * 700); }
-      else { this.status = 'connecting'; CoopUI.refresh(); peer.destroy(); this.retry(3000); }
-    });
-  },
-  broadcast(msg, except) {
-    if (!this.conns) return;
-    for (const [id, c] of this.conns) if (id !== except && c.open) c.send(msg);
+  onMsg(text) {
+    let m;
+    try { m = JSON.parse(text); } catch (e) { return; }
+    if (!m || typeof m.i !== 'string' || m.i === this.self || m.i.length > 24) return;
+    if (m.bye) { this.drop(m.i); return; }
+    if (m.s !== undefined && String(m.s) !== this.seed) return; // someone in a different world
+    this.receive(m.i, m.st);
   },
 
   // --- per-frame -----------------------------------------------------------------
@@ -173,13 +120,13 @@ const Coop = {
       const key = `${st.px},${st.py},${st.f},${st.m},${st.w},${st.ch},${st.co}`;
       const now = performance.now();
       // send on change (capped ~30/s), plus a keepalive every 2s
-      if ((key !== this.last && now - this.lastSent > 33) || now - this.lastSent > 2000) {
+      if ((key !== this.last && now - this.lastSent > 66) || now - this.lastSent > 2000) {
         this.last = key; this.lastSent = now; this.lastState = st; this.sendFn(st);
       }
     }
     const k = 1 - Math.exp(-dt * 14), now = performance.now();
     for (const [id, e] of this.peers) {
-      if (this.status !== 'joined' || this.peer) { if (now - e.seen > 8000) { this.drop(id); continue; } }
+      if (!this.artifact && now - e.seen > 8000) { this.drop(id); continue; }
       if (Math.abs(e.tx - e.px) > 64 || Math.abs(e.ty - e.py) > 64) { e.px = e.tx; e.py = e.ty; }
       e.px += (e.tx - e.px) * k; e.py += (e.ty - e.py) * k;
       e.animT = e.moving ? (e.animT || 0) + dt : 0;
@@ -270,7 +217,6 @@ const CoopUI = {
       if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, () => prompt('Invite link', url));
       else prompt('Invite link', url);
     };
-    if (typeof Peer === 'undefined') { btn.style.display = 'none'; }
     if (q.get('room')) Coop.join(input.value.trim().toLowerCase(), seed);
     this.refresh();
   },
@@ -313,11 +259,92 @@ const CoopUI = {
     const [col, text] = {
       solo: ['#555', 'Solo — pick a room and join'],
       connecting: ['#e8b040', 'Connecting…'],
-      host: ['#5ae070', n > 1 ? `${n} explorers here` : 'In room — waiting for friends'],
-      joined: ['#5ae070', `${n} explorer${n > 1 ? 's' : ''} here`],
+      joined: ['#5ae070', n > 1 ? `${n} explorers here` : 'In room — waiting for friends'],
+      offline: ['#e05050', 'Can’t reach co-op servers — retrying'],
     }[Coop.status];
     this.panel.querySelector('#coop-status i').style.background = col;
     this.panel.querySelector('#coop-status span').textContent = text;
     this.btn.querySelector('.dot').style.background = col;
   },
 };
+
+// Minimal MQTT 3.1.1 client over WebSocket: CONNECT, SUBSCRIBE, QoS 0 PUBLISH,
+// PINGREQ. Reconnects with backoff.
+class MqttLink {
+  constructor(url, topic, onMsg, onChange) {
+    this.url = url; this.topic = topic; this.onMsg = onMsg; this.onChange = onChange;
+    this.ready = false; this.closed = false; this.backoff = 1000;
+    this.connect();
+  }
+  connect() {
+    if (this.closed) return;
+    let ws;
+    try { ws = new WebSocket(this.url, 'mqtt'); } catch (e) { this.retry(); return; }
+    this.ws = ws; ws.binaryType = 'arraybuffer';
+    this.buf = new Uint8Array(0);
+    ws.onopen = () => {
+      const id = 'wm' + Math.random().toString(36).slice(2, 12);
+      this.send(0x10, [...MqttLink.str('MQTT'), 4, 0x02, 0, 60, ...MqttLink.str(id)]);
+    };
+    ws.onmessage = (ev) => this.feed(new Uint8Array(ev.data));
+    ws.onclose = ws.onerror = () => {
+      if (this.ws !== ws) return;
+      this.ws = null; clearInterval(this.ping);
+      if (this.ready) { this.ready = false; this.onChange(); }
+      this.retry();
+    };
+  }
+  retry() {
+    if (this.closed) return;
+    clearTimeout(this.rt);
+    this.rt = setTimeout(() => this.connect(), this.backoff);
+    this.backoff = Math.min(this.backoff * 2, 15000);
+  }
+  close() {
+    this.closed = true; clearTimeout(this.rt); clearInterval(this.ping);
+    if (this.ws) { try { this.send(0xE0, []); this.ws.close(); } catch (e) { /* gone */ } }
+    this.ws = null; this.ready = false;
+  }
+  static str(s) { const b = new TextEncoder().encode(s); return [b.length >> 8, b.length & 255, ...b]; }
+  send(type, body) {
+    if (!this.ws || this.ws.readyState !== 1) return;
+    const len = []; let n = body.length;
+    do { let d = n % 128; n = Math.floor(n / 128); if (n > 0) d |= 128; len.push(d); } while (n > 0);
+    this.ws.send(new Uint8Array([type, ...len, ...body]));
+  }
+  publish(text) {
+    if (!this.ready) return;
+    this.send(0x30, [...MqttLink.str(this.topic), ...new TextEncoder().encode(text)]);
+  }
+  feed(chunk) {
+    const b = new Uint8Array(this.buf.length + chunk.length);
+    b.set(this.buf); b.set(chunk, this.buf.length);
+    let o = 0;
+    for (;;) {
+      if (b.length - o < 2) break;
+      let mult = 1, len = 0, k = o + 1, byte;
+      do { if (k >= b.length) { len = -1; break; } byte = b[k++]; len += (byte & 127) * mult; mult *= 128; } while (byte & 128);
+      if (len < 0 || k + len > b.length) break;
+      this.packet(b[o], b.subarray(k, k + len));
+      o = k + len;
+    }
+    this.buf = b.slice(o);
+  }
+  packet(type, body) {
+    const t = type >> 4;
+    if (t === 2) { // CONNACK
+      if (body[1] !== 0) { this.ws.close(); return; }
+      this.send(0x82, [0, 1, ...MqttLink.str(this.topic), 0]);
+      clearInterval(this.ping);
+      this.ping = setInterval(() => this.send(0xC0, []), 30000);
+    } else if (t === 9) { // SUBACK
+      this.ready = true; this.backoff = 1000; this.onChange();
+    } else if (t === 3) { // PUBLISH
+      const tl = (body[0] << 8) | body[1];
+      let p = 2 + tl;
+      if ((type >> 1) & 3) p += 2;
+      try { this.onMsg(new TextDecoder().decode(body.subarray(p))); } catch (e) { /* bad payload */ }
+    }
+  }
+}
+addEventListener('pagehide', () => { if (Coop.links) Coop.leave(); });
