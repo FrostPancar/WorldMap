@@ -15,7 +15,7 @@ for (const k of ['scene', 'light', 'emit']) {
 }
 
 const game = {
-  mode: 'world', world: null, map: null, ret: null, interiors: new Map(),
+  mode: 'world', world: null, map: null, ret: null, stack: [], interiors: new Map(),
   time: 0, day: 0.79, bamb: 1, camX: 0, camY: 0,
   fade: 1, fadeDir: -1, fadeSpeed: 2.2, pending: null,
   player: new Player(), view: { scale: 4, VW: 480, VH: 270, SW: 482, SH: 272 },
@@ -93,10 +93,14 @@ function toggleMap() {
     snapCamera();
   }, 4);
 }
+// game.stack holds where to return to for every level we have gone down.
 function enterInterior(ent) {
+  const p = game.player;
+  const back = { map: game.map, x: ent.ret ? ent.ret.x : p.fx, y: ent.ret ? ent.ret.y : p.fy, ent: game.ret };
   fadeTo(() => {
     let im = game.interiors.get(ent.id);
     if (!im) { im = genInterior(ent); game.interiors.set(ent.id, im); }
+    game.stack.push(back);
     game.ret = ent; game.map = im;
     game.player.place(im.spawn.x, im.spawn.y); game.player.face = 'down';
     particles.length = 0;
@@ -104,10 +108,10 @@ function enterInterior(ent) {
   });
 }
 function exitInterior() {
-  const ent = game.ret;
   fadeTo(() => {
-    game.map = game.world.map; game.ret = null;
-    game.player.place(ent.ret.x, ent.ret.y); game.player.face = 'down';
+    const back = game.stack.pop() || { map: game.world.map, x: game.world.start.x, y: game.world.start.y, ent: null };
+    game.map = back.map; game.ret = back.ent;
+    game.player.place(back.x, back.y); game.player.face = 'down';
     particles.length = 0;
     snapCamera();
   });
@@ -222,6 +226,12 @@ function ambientParticles(dt) {
       case B.PINK: if (r < 0.04) spawnParticle('sparkle', wx, wy, 0, -2, 0.9); break;
       case B.DUNES: if (r < 0.02) spawnParticle('dust', wx, wy, 14 + Math.random() * 10, (Math.random() - 0.5) * 2, 2.5); break;
       case B.MARSH: if (r < 0.025) spawnParticle('bubble', wx, wy, 0, -5, 1.2); break;
+      case B.VOLCANO:
+        if (r < 0.02) spawnParticle('ember', wx, wy, (Math.random() - 0.5) * 6, -8 - Math.random() * 8, 1.6);
+        else if (r < 0.04) spawnParticle('ash', wx, wy - 20, 3, 5 + Math.random() * 3, 4);
+        break;
+      case B.CRYSTAL: if (r < 0.05) spawnParticle('shard', wx, wy, 0, -1.5, 1.2); break;
+      case B.AUTUMN: if (r < 0.04) spawnParticle('leafA', wx, wy - 20, 0, 6 + Math.random() * 4, 4); break;
     }
   }
   // snow falls across the whole view while standing in the snowfields
@@ -267,7 +277,7 @@ function renderWorld(S, L, E, P) {
 
   // animated + emissive cells (one chunk margin below for tall sprites)
   const W = m.w;
-  for (let cy = cy0; cy <= Math.min(m.chh - 1, cy1 + 1); cy++) for (let cx = cx0; cx <= cx1; cx++) {
+  for (let cy = cy0; cy <= Math.min(m.chh - 1, cy1 + 1); cy++) for (let cx = Math.max(0, cx0 - 1); cx <= cx1; cx++) {
     const ck = m.chunks[cy * m.cw + cx];
     for (const i of ck.anim) {
       const gv = m.glyph[i], g = gv & 0x7fff, d = GLYPHS[g];

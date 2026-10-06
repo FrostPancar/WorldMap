@@ -533,3 +533,170 @@ const MAP_ICONS = {
   oasis: ['.111.', '1.1.1', '..1..', '.1.1.', '11111'],
   icecave: ['.111.', '11111', '11.11', '1...1', '1...1'],
 };
+
+// ---------------------------------------------------------------------------
+// Expansion: volcano, crystal forest, autumn forest and large landmarks.
+// Big structures are generated from a function instead of typed by hand.
+// ---------------------------------------------------------------------------
+function rowsFrom(w, h, fn) {
+  const rows = [];
+  for (let y = 0; y < h; y++) { let r = ''; for (let x = 0; x < w; x++) r += fn(x, y) || '.'; rows.push(r); }
+  return rows;
+}
+
+defGlyph('lava', [
+  ['11211121', '12111211', '11112111', '21111112', '11121111', '11211121', '12111111', '11111211'],
+  ['12111211', '11112111', '21111112', '11121111', '11211121', '12111111', '11111211', '11211121'],
+  ['11112111', '21111112', '11121111', '11211121', '12111111', '11111211', '11211121', '12111211'],
+], ['#7a1e0c', '#e8701a'], { anim: 2.5, emit: [2] });
+variant('lavaLit', 'lava', ['#7a1e0c', '#e8701a'], { light: { c: '#ff5a1a', r: 40, i: 0.55, f: 0.15, ox: 4, oy: 4, ember: 1 } });
+variant('peakBasalt', 'peak', ['#4a3434']);
+variant('peakOutlineBasalt', 'peakOutline', ['#5a3a34']);
+variant('rockObsidian', 'rock', ['#3a2a44', '#1e1626']);
+variant('speckAsh', 'speck', ['#4a3a3a']);
+variant('speck2Ash', 'speck2', ['#3a2e2e']);
+variant('rubbleBasalt', 'rubble', ['#4a3030']);
+defGlyph('vent', [
+  ['........', '...1....', '..1.1...', '...1....', '...2....', '..222...', '.23332..', '........'],
+  ['....1...', '...1....', '..1.1...', '...1....', '...2....', '..222...', '.23332..', '........'],
+], ['#5a4a4a', '#3a2a2a', '#ff7a20'], { anim: 2, emit: [3], light: { c: '#ff5a20', r: 22, i: 0.7, f: 0.3, ox: 4, oy: 6, ember: 1 } });
+
+defGlyph('crystalBig', [
+  '...1....', '..121...', '..121...', '..121...', '..121...', '.11221..', '.12221..', '.12221.1',
+  '.12221.1', '.1222112', '.1222112', '11222112', '12222112', '12222111', '.111111.', '........'],
+  [P.purple, '#f0d8ff'], { emit: true });
+variant('crystalBigLit', 'crystalBig', [P.purple, '#f0d8ff'], { light: { c: P.purple, r: 46, i: 0.9, f: 0.12, ox: 4, oy: -2 } });
+variant('crystalBigCyan', 'crystalBig', [P.cyan, '#d8fffa']);
+variant('crystalBigCyanLit', 'crystalBig', [P.cyan, '#d8fffa'], { light: { c: P.cyan, r: 46, i: 0.9, f: 0.12, ox: 4, oy: -2 } });
+variant('crystalDim', 'crystal', [P.violet, P.purple], { light: false });
+variant('dotgridViolet', 'dotgrid', ['#4a3a7a']);
+variant('speckViolet', 'speck', ['#3a2a5a']);
+variant('checkerViolet', 'checker', ['#24183a']);
+
+variant('treeOrange', 'roundTree', ['#c8641a', '#f0a030', P.trunk]);
+variant('treeRed', 'roundTree', ['#a8301e', '#e05a30', P.trunk]);
+variant('treeYellow', 'roundTree', ['#a88a1a', '#f0d040', P.trunk]);
+variant('pineAutumn', 'pineTall', ['#b8501a', P.trunkD]);
+defGlyph('leaves', [
+  '........', '........', '........', '..1.....', '.121....', '..1..1..', '....121.', '.....1..'], ['#d06a20', '#f0b040']);
+variant('leavesRed', 'leaves', ['#b8301e', '#e8702a']);
+defGlyph('pumpkin', [
+  '........', '...2....', '..111...', '.11111..', '1313131.', '1111111.', '.11111..', '........'], [P.orange, P.pine, P.fireY],
+  { emit: [3], light: { c: '#ffa030', r: 16, i: 0.6, f: 0.25, ox: 3.5, oy: 4.5 } });
+
+defGlyph('keep', rowsFrom(24, 24, (x, y) => {
+  const tower = x < 6 || x >= 18, body = x >= 4 && x < 20 && y >= 6;
+  if (!tower && !body) return '.';
+  if (tower && y === 0) return x % 2 === 0 ? '1' : '.';
+  if (!tower && y === 6) return x % 2 === 0 ? '1' : '.';
+  if (x >= 10 && x < 14 && y >= 17) return (y === 17 && (x === 10 || x === 13)) ? '1' : '3';
+  const win = (a, b) => x >= a && x < a + 2 && y >= b && y < b + 2;
+  if (win(2, 4) || win(20, 4) || win(2, 12) || win(20, 12) || win(7, 10) || win(15, 10)) return '4';
+  if (x >= 11 && x < 13 && y >= 8 && y < 14) return (y === 13 && x === 11) ? '.' : '5';
+  if (y % 4 === 3) return '2';
+  return (x + (y >> 2) * 3) % 6 === 0 ? '2' : '1';
+}), [P.stone, P.stoneD, '#0c0c14', P.fireY, P.red], { emit: [4], light: { c: '#ffc060', r: 50, i: 0.45, f: 0.06, ox: 12, oy: 6 } });
+
+defGlyph('lighthouse', rowsFrom(8, 32, (x, y) => {
+  if (y === 0) return x >= 3 && x <= 4 ? '1' : '';
+  if (y === 1) return x >= 2 && x <= 5 ? '1' : '';
+  if (y === 2 || y === 6) return x >= 1 && x <= 6 ? '2' : '';
+  if (y < 6) return x === 1 || x === 6 ? '2' : (x >= 2 && x <= 5 ? '4' : '');
+  if (y >= 30) return '2';
+  const half = 2 + Math.floor((y - 7) / 8);
+  if (x < 4 - half || x >= 4 + half) return '';
+  if (y >= 26 && x >= 3 && x <= 4) return '3';
+  return ((y >> 2) % 2) ? '1' : '5';
+}), [P.red, P.grey, '#0c0c14', P.fireY, P.white], { emit: [4],
+  light: { c: '#ffe8a0', r: 110, i: 0.55, f: 0.45, ox: 4, oy: -20 } });
+
+defGlyph('mineMouth', [
+  '11111111', '12111121', '1......1', '1......1', '1......1', '1......1', '1......1', '1......1'], [P.trunk, P.fireY]);
+defGlyph('rails', [
+  '.1....1.', '21222212', '.1....1.', '.1....1.', '.1....1.', '21222212', '.1....1.', '.1....1.'], [P.grey, P.trunkD]);
+defGlyph('railsH', rowsFrom(8, 8, (x, y) => (y === 1 || y === 6) ? '1' : ((x === 1 || x === 5) ? '2' : '')), [P.grey, P.trunkD]);
+defGlyph('cart', [
+  '........', '..3.3...', '1111111.', '1222221.', '1222221.', '.11111..', '.4...4..', '........'], [P.grey2, P.trunk, P.gold, '#202028']);
+variant('caveRockOre', 'caveRock', [P.grey2, P.gold]);
+
+defGlyph('fireShrine', rowsFrom(16, 16, (x, y) => {
+  const half = Math.floor(y / 2) + 1;
+  if (x < 8 - half || x >= 8 + half) return '';
+  if (y >= 10 && x >= 6 && x < 10) return '3';
+  if (y === 5 && x >= 7 && x < 9) return '3';
+  return (x + y) % 5 === 0 ? '2' : '1';
+}), ['#3a2a44', '#5a3a5a', '#ff7a20'], { emit: [3], light: { c: '#ff5a20', r: 56, i: 1.0, f: 0.2, ox: 8, oy: 2, ember: 1 } });
+
+defGlyph('worldTree', rowsFrom(40, 48, (x, y) => {
+  const dx = (x - 19.5) / 19.5, dy = (y - 15) / 15;
+  const h = hash2(x, y, 77);
+  if (dx * dx + dy * dy < 1 && y < 30) {
+    if (h < 0.035) return '4';
+    if (dx * dx + dy * dy > 0.8 && h < 0.35) return '';
+    return (h < 0.45 + dy * 0.3) ? '2' : '1';
+  }
+  const spread = y > 40 ? (y - 40) * 1.2 : 0;
+  if (y >= 26 && x >= 15 - spread && x < 25 + spread) {
+    if (y >= 40 && x >= 18 && x < 22) return '3';
+    if (y >= 42 && (x < 15 || x >= 25) && h < 0.4) return '';
+    return (x + Math.floor(y / 3)) % 4 === 0 ? '6' : '5';
+  }
+  return '';
+}), [P.pineD, P.lime, '#060402', '#ffe08a', P.brown, P.brownD], { emit: [4],
+  light: { c: '#e8ff9a', r: 100, i: 0.45, f: 0.1, ox: 20, oy: -10 } });
+
+defGlyph('ribs', rowsFrom(32, 16, (x, y) => {
+  if (x < 7 && y >= 9 && y < 15) {
+    const skull = ['.1111..', '111111.', '1.11.11', '1111111', '.1.1.1.', '.......'];
+    return skull[y - 9][x] === '1' ? '1' : '';
+  }
+  if (y === 13 && x >= 6 && x < 31) return '1';
+  if (x % 4 === 2 && x >= 9 && x <= 29) {
+    const top = 2 + Math.round(Math.abs(x - 19) * 0.45);
+    if (y >= top && y < 13) return '1';
+    if (y === top - 1) return '';
+  }
+  if (x % 4 === 3 && x >= 9 && x <= 29 && y === 2 + Math.round(Math.abs(x - 1 - 19) * 0.45)) return '1';
+  return '';
+}), [P.bone]);
+
+defGlyph('wreck', rowsFrom(24, 16, (x, y) => {
+  if (y >= 8) {
+    const l = 1 + Math.floor((y - 8) * 0.6), r = 23 - Math.floor((y - 8) * 0.9);
+    if (x < l || x > r) return '';
+    if (x >= 9 && x < 12 && y >= 10 && y < 14) return '4';
+    return y % 2 === 0 ? '2' : '1';
+  }
+  const mx = 12 + Math.floor((8 - y) / 3);
+  if (x === mx) return '1';
+  if (y >= 1 && y <= 5 && x > mx && x <= mx + 5 && hash2(x, y, 5) < 0.7) return '3';
+  return '';
+}), [P.trunk, P.trunkD, '#d8d0b8', '#0a0806']);
+
+variant('witchHut', 'house', ['#2a1a3a', '#5a2a7a', '#4a4038', '#7aff6a', P.brownD],
+  { light: { c: '#6aff6a', r: 22, i: 0.8, f: 0.2, ox: 4.5, oy: 2.5 } });
+defGlyph('cauldron', [
+  ['..2.2...', '.2..2...', '1111111.', '.13331..', '.11111..', '.11111..', '..111...', '.1...1..'],
+  ['.2..2...', '..2..2..', '1111111.', '.13331..', '.11111..', '.11111..', '..111...', '.1...1..'],
+], ['#2a2a34', '#7aff6a', '#3ac84a'], { anim: 3, emit: [2, 3], light: { c: '#5aff6a', r: 44, i: 1.0, f: 0.2, ox: 3.5, oy: 3 } });
+defGlyph('throne', [
+  '.1....1.', '.122221.', '.122221.', '.122221.', '11111111', '13333331', '.1....1.', '.1....1.'], [P.gold, P.red, P.redD]);
+defGlyph('banner', [
+  '11111111', '.222222.', '.232232.', '.222222.', '.223322.', '.222222.', '.22..22.', '.2....2.'], [P.gold, P.red, P.fireY]);
+defGlyph('stairsDown', [
+  '11111111', '1.......', '1.111111', '1.1.....', '1.1.1111', '1.1.1...', '1.1.1.11', '1.1.1.1.'], ['#c8b8ff'], { emit: true });
+defGlyph('anchor', [
+  '...1....', '..1.1...', '...1....', '.11111..', '...1....', '1..1..1.', '.1.1.1..', '..111...'], [P.grey]);
+defGlyph('puddle', [
+  '........', '........', '..1111..', '.122221.', '.111111.', '........', '........', '........'], ['#1d3a60', '#3a6ab0']);
+
+Object.assign(MAP_ICONS, {
+  castle: ['1.1.1', '11111', '1.1.1', '11.11', '11.11'],
+  lighthouse: ['.111.', '..1..', '.111.', '.111.', '11111'],
+  mine: ['11111', '1...1', '1.1.1', '1...1', '1...1'],
+  volcano: ['..1..', '.1.1.', '.111.', '1...1', '11111'],
+  worldtree: ['.111.', '11111', '11111', '..1..', '.111.'],
+  wreck: ['..1..', '..11.', '..1..', '11111', '.111.'],
+  ribs: ['1.1.1', '1.1.1', '11111', '.....', '.....'],
+  witch: ['..1..', '.111.', '11111', '.1.1.', '.111.'],
+});

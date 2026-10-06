@@ -95,6 +95,7 @@ const PK = {
   bubble: { c: '#ff5a50', emit: 0.5 }, ember: { c: '#ffb040', emit: 1 }, snow: { c: '#e8f0ff', emit: 0.25 },
   mote: { c: '#8a8ad0', emit: 0.4 }, step: { c: '#6a6a70', emit: 0 }, drip: { c: '#6ab0ff', emit: 0.6 },
   leaf: { c: '#5aa040', emit: 0 },
+  ash: { c: '#6a5a5a', emit: 0 }, shard: { c: '#d8b0ff', emit: 1 }, leafA: { c: '#e07a28', emit: 0.2 },
 };
 const particles = [];
 
@@ -114,8 +115,8 @@ function updateParticles(dt) {
         p.vx *= 0.98; p.vy *= 0.98; break;
       case 'ember':
         p.vx += Math.sin(p.ph + p.life * 9) * 12 * dt; p.vy -= 6 * dt; break;
-      case 'snow': case 'leaf':
-        p.vx = Math.sin(p.ph + p.life * 2) * 8 + (p.k === 'leaf' ? 6 : 0); break;
+      case 'snow': case 'leaf': case 'leafA': case 'ash':
+        p.vx = Math.sin(p.ph + p.life * 2) * 8 + (p.k === 'leaf' || p.k === 'leafA' ? 6 : 0); break;
       case 'drip': p.vy += 120 * dt; break;
     }
     p.x += p.vx * dt; p.y += p.vy * dt;
@@ -129,7 +130,7 @@ function drawParticles(sctx, ectx, ox, oy, W, H, time) {
     const def = PK[p.k];
     let a = Math.min(1, p.life / (p.max * 0.3), (p.max - p.life) / 0.25 + 0.1);
     if (p.k === 'firefly') a *= 0.35 + 0.65 * Math.max(0, Math.sin(time * 3 + p.ph));
-    if (p.k === 'sparkle' || p.k === 'twinkle') a *= Math.sin((1 - p.life / p.max) * Math.PI);
+    if (p.k === 'sparkle' || p.k === 'twinkle' || p.k === 'shard') a *= Math.sin((1 - p.life / p.max) * Math.PI);
     if (a <= 0.02) continue;
     sctx.globalAlpha = a; sctx.fillStyle = def.c; sctx.fillRect(x, y, 1, 1);
     if (def.emit) { ectx.globalAlpha = a * def.emit; ectx.fillStyle = def.c; ectx.fillRect(x, y, 1, 1); }

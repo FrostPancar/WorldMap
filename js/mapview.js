@@ -117,7 +117,7 @@ const MapView = {
   },
 
   zoomBy(dir) {
-    const levels = [1, 2, 4];
+    const levels = [0.5, 1, 2, 4];
     const k = clamp(levels.indexOf(this.zoom) + dir, 0, levels.length - 1);
     this.zoom = levels[k];
   },
@@ -129,7 +129,7 @@ const MapView = {
     const ox = Math.round(this.cx * z - VW / 2) - 1, oy = Math.round(this.cy * z - VH / 2) - 1;
     sctx.imageSmoothingEnabled = false;
     if (z === 4) sctx.drawImage(this.big, -ox, -oy);
-    else sctx.drawImage(this.small, -ox, -oy, this.W * z, this.H * z);
+    else { sctx.imageSmoothingEnabled = z < 1; sctx.drawImage(this.small, -ox, -oy, this.W * z, this.H * z); }
     if (this.fogDirty) { this.fctx.putImageData(this.fogData, 0, 0); this.fogDirty = false; }
     sctx.imageSmoothingEnabled = true;
     sctx.drawImage(this.fog, -ox, -oy, this.W * z, this.H * z);

@@ -109,8 +109,8 @@ class TileMap {
       if (r) this.drawRoad(ctx, (x - x0) * TS, (y - y0) * TS, r, this.bgPal[this.bg[y * w + x]]);
     }
     // static glyphs, top to bottom so tall sprites overlap correctly
-    for (let y = y0; y < y0 + CH + 3 && y < this.h; y++) {
-      for (let x = Math.max(0, x0 - 2); x < x0 + CH && x < w; x++) {
+    for (let y = y0; y < y0 + CH + 6 && y < this.h; y++) {
+      for (let x = Math.max(0, x0 - 5); x < x0 + CH && x < w; x++) {
         const gv = this.glyph[y * w + x];
         if (!gv) continue;
         const g = gv & 0x7fff, d = GLYPHS[g];

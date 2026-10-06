@@ -7,18 +7,45 @@
 
 const EXIT = { exit: true };
 
+// Interiors that keep going down: each level has a glowing stairway to the
+// next, up to DEEP_MAX levels below the surface.
+const DEEP = { cave: 1, icecave: 1, dungeon: 1, crypt: 1, mine: 1 };
+const DEEP_MAX = 3;
+
 function genInterior(ent) {
+  const depth = ent.depth || 0;
+  const seed = (ent.seed + depth * 91733) >>> 0;
+  let m;
   switch (ent.type) {
-    case 'cave': return genCave(ent.seed, false);
-    case 'icecave': return genCave(ent.seed, true);
-    case 'dungeon': return genDungeon(ent.seed, false);
-    case 'crypt': return genDungeon(ent.seed, true);
-    case 'house': return genRoom(ent.seed, 'house');
-    case 'hollow': return genRoom(ent.seed, 'hollow');
-    case 'temple': return genRoom(ent.seed, 'temple');
-    case 'tower': return genRoom(ent.seed, 'tower');
+    case 'cave': m = genCave(seed, false, null, depth); break;
+    case 'icecave': m = genCave(seed, true, null, depth); break;
+    case 'mine': m = genCave(seed, false, 'mine', depth); break;
+    case 'dungeon': m = genDungeon(seed, false); break;
+    case 'crypt': m = genDungeon(seed, true); break;
+    case 'house': case 'hollow': case 'temple': case 'tower': case 'castle': case 'lighthouse':
+    case 'firetemple': case 'worldtree': case 'wreck': case 'witch':
+      m = genRoom(seed, ent.type); break;
+    default: m = genCave(seed, false, null, depth);
   }
-  return genCave(ent.seed, false);
+  if (depth) m.ambient = m.ambient.map((a) => a * Math.pow(0.8, depth));
+  if (DEEP[ent.type] && depth < DEEP_MAX) addStairsDown(m, ent, depth, seed);
+  return m;
+}
+
+function addStairsDown(m, ent, depth, seed) {
+  const R = mulberry32(seed + 5);
+  const d = bfsFrom(m, m.spawn.x, m.spawn.y);
+  let max = 0;
+  for (const v of d) if (v > max) max = v;
+  const cand = [];
+  for (let i = 0; i < d.length; i++) if (d[i] > max * 0.55 && !m.glyph[i] && !m.solid[i] && !m.entr.has(i)) cand.push(i);
+  if (!cand.length) return;
+  const i = cand[Math.floor(R() * cand.length)];
+  m.glyph[i] = G.stairsDown;
+  m.entr.set(i, { id: ent.id + '>' + (depth + 1), type: ent.type, seed: ent.seed, depth: depth + 1 });
+  const x = i % m.w, y = (i / m.w) | 0;
+  m.chunks[((y / CH) | 0) * m.cw + ((x / CH) | 0)].emit.push(i);
+  m.cache.clear();
 }
 
 // After decorating, make sure every floor cell is reachable from the spawn by
@@ -107,16 +134,18 @@ function bfsFrom(m, sx, sy) {
   return d;
 }
 
-function genCave(seed, ice) {
+function genCave(seed, ice, kind, depth) {
+  const mine = kind === 'mine';
+  depth = depth || 0;
   const W = 72, H = 54, R = mulberry32(seed);
   const floor = caFloor(W, H, R, 0.45, 5);
   const m = new TileMap(W, H, {
     kind: 'interior', voidColor: '#000000',
-    bgPal: ice ? ['#0a1220', '#03050a', '#0e2440', '#16263a'] : ['#0b0d16', '#030305', '#0a1630', '#191b2c'],
-    ambient: ice ? [0.3, 0.36, 0.5] : [0.22, 0.22, 0.32],
+    bgPal: ice ? ['#0a1220', '#03050a', '#0e2440', '#16263a'] : mine ? ['#110d0a', '#040302', '#0a1630', '#221a14'] : ['#0b0d16', '#030305', '#0a1630', '#191b2c'],
+    ambient: ice ? [0.3, 0.36, 0.5] : mine ? [0.26, 0.22, 0.2] : [0.22, 0.22, 0.32],
   });
   const crystal = ice ? 'crystalIce' : (R() < 0.5 ? 'crystal' : 'crystalPurple');
-  const rock1 = ice ? 'caveRockIce' : 'caveRock', rock2 = ice ? 'caveRock2Ice' : 'caveRock2';
+  const rock1 = ice ? 'caveRockIce' : 'caveRock', rock2 = ice ? 'caveRock2Ice' : mine ? 'caveRockOre' : 'caveRock2';
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const i = y * W + x;
     if (!floor[i]) {
@@ -138,7 +167,7 @@ function genCave(seed, ice) {
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const i = y * W + x;
     if (!floor[i] || Math.abs(x - exX) + Math.abs(y - exY) < 6) continue;
-    if (fbm(x * 0.09, y * 0.09, seed + 2, 3) > 0.64) {
+    if (fbm(x * 0.09, y * 0.09, seed + 2, 3) > (mine ? 0.7 : 0.64)) {
       m.water[i] = 1; m.solid[i] = 1; m.bg[i] = 2;
       if (R() < 0.5) m.glyph[i] = G[ice ? 'waveIce' : 'waveCave'];
     }
@@ -149,7 +178,7 @@ function genCave(seed, ice) {
     const nearWall = !floor[i - 1] || !floor[i + 1] || !floor[i - W] || !floor[i + W];
     const r = R(), n = fbm(x * 0.12, y * 0.12, seed + 3, 2);
     const fl = R() < 0.5 ? FLIP : 0;
-    if (nearWall && r < 0.035) { m.glyph[i] = G[crystal] | fl; m.solid[i] = 1; }
+    if (nearWall && r < 0.035 + depth * 0.02) { m.glyph[i] = G[crystal] | fl; m.solid[i] = 1; }
     else if (r < 0.042 && n > 0.45) m.glyph[i] = G[ice ? 'crystalIce' : (R() < 0.6 ? 'glowShroom' : 'glowShroomPurple')] | fl;
     else if (r < 0.06) { m.glyph[i] = G[ice ? 'stalagIce' : 'stalagmite'] | fl; m.solid[i] = 1; }
     else if (n > 0.6 && r < 0.4) m.glyph[i] = G[ice ? 'dotgridIce' : 'grassCave'] | fl;
@@ -166,7 +195,33 @@ function genCave(seed, ice) {
   let mid = -1;
   for (let t = 0; t < 400; t++) { const i = Math.floor(R() * W * H); if (d[i] > fd * 0.4 && !m.glyph[i]) { mid = i; break; } }
   if (mid >= 0) m.glyph[mid] = G.key;
-  spawnInteriorCreatures(m, R, ice ? ['c_bat', 'c_slime'] : ['c_bat', 'c_bat', 'c_slime', 'c_spider'], 7);
+  if (mine && far >= 0) {
+    // lay rails from the ladder to the treasure, with lanterns along the way
+    const path = [];
+    let c = far;
+    while (d[c] > 0) {
+      path.push(c);
+      let nxt = -1;
+      for (const j of [c - 1, c + 1, c - W, c + W]) if (d[j] === d[c] - 1) { nxt = j; break; }
+      if (nxt < 0) break;
+      c = nxt;
+    }
+    path.push(c);
+    const onPath = new Set(path);
+    path.forEach((i, k) => {
+      if (i === far || m.solid[i] || m.entr.has(i)) return;
+      const a = path[k - 1], b = path[k + 1];
+      const horiz = (a !== undefined && Math.abs(a - i) === 1) || (b !== undefined && Math.abs(b - i) === 1);
+      m.glyph[i] = G[horiz ? 'railsH' : 'rails'];
+      if (k % 9 === 4) {
+        for (const j of [i - 1, i + 1, i - W, i + W]) {
+          if (floor[j] && !m.solid[j] && !onPath.has(j) && !m.glyph[j]) { m.glyph[j] = G[R() < 0.25 ? 'cart' : 'lantern']; m.solid[j] = 1; break; }
+        }
+      }
+    });
+    ensureReachable(m, floor);
+  }
+  spawnInteriorCreatures(m, R, ice ? ['c_bat', 'c_slime'] : mine ? ['c_bat', 'c_spider'] : ['c_bat', 'c_bat', 'c_slime', 'c_spider'], 7 + depth * 2);
   m.finalize();
   return m;
 }
@@ -274,14 +329,21 @@ function genRoom(seed, kind) {
     hollow: { W: 21, H: 17, bg: ['#1a1209', '#0a0604'], amb: [0.32, 0.3, 0.26], wall: 'caveRockBrown' },
     temple: { W: 23, H: 19, bg: ['#1a0b0e', '#0a0405'], amb: [0.34, 0.2, 0.22], wall: 'brickRed' },
     tower: { W: 17, H: 15, bg: ['#141424', '#06060c'], amb: [0.32, 0.3, 0.42], wall: 'brickStone' },
+    castle: { W: 27, H: 21, bg: ['#15131c', '#08070c'], amb: [0.36, 0.3, 0.3], wall: 'brickStone' },
+    lighthouse: { W: 13, H: 13, bg: ['#16141a', '#08070a'], amb: [0.3, 0.3, 0.34], wall: 'brickStone' },
+    firetemple: { W: 23, H: 19, bg: ['#160806', '#080302', '#2a0a04'], amb: [0.3, 0.16, 0.12], wall: 'brickRed' },
+    worldtree: { W: 29, H: 23, bg: ['#1a1209', '#0a0604'], amb: [0.3, 0.3, 0.24], wall: 'caveRockBrown' },
+    wreck: { W: 19, H: 11, bg: ['#1a120c', '#0a0604'], amb: [0.3, 0.3, 0.36], wall: 'wallWood' },
+    witch: { W: 15, H: 11, bg: ['#120c18', '#08060c'], amb: [0.24, 0.2, 0.3], wall: 'wallWood' },
   }[kind];
+  const ROUND = { hollow: 1, tower: 1, lighthouse: 1, worldtree: 1 };
   const W = cfg.W, H = cfg.H;
   const m = new TileMap(W, H, { kind: 'interior', voidColor: '#000000', bgPal: cfg.bg, ambient: cfg.amb });
   const floor = new Uint8Array(W * H);
   const cx = W >> 1, cy = H >> 1;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     let f;
-    if (kind === 'house' || kind === 'temple') f = x >= 1 && x < W - 1 && y >= 2 && y < H - 1;
+    if (!ROUND[kind]) f = x >= 1 && x < W - 1 && y >= 2 && y < H - 1;
     else {
       const dx = (x - cx) / (W / 2 - 1.2), dy = (y - cy) / (H / 2 - 1.2);
       f = dx * dx + dy * dy < 1 && y >= 2;
@@ -298,7 +360,8 @@ function genRoom(seed, kind) {
     m.solid[i] = 1;
     if (wallEdge(floor, W, H, x, y) || (y < H - 1 && floor[i + W]) || (y < H - 2 && floor[i + 2 * W])) {
       m.bg[i] = 1;
-      m.glyph[i] = G[kind === 'hollow' && R() < 0.4 ? 'root' : cfg.wall] | (kind === 'hollow' && R() < 0.5 ? FLIP : 0);
+      const tree = kind === 'hollow' || kind === 'worldtree';
+      m.glyph[i] = G[tree && R() < 0.4 ? 'root' : cfg.wall] | (tree && R() < 0.5 ? FLIP : 0);
     } else m.bg[i] = 1;
   }
   // exit door in the bottom wall
@@ -318,6 +381,49 @@ function genRoom(seed, kind) {
     place(W - 4, 5, 'table', 1); place(W - 3, 5, 'table', 1); place(W - 4, 4, 'candle', 1);
     place(W - 2, H - 2, 'barrel', 1); place(1, H - 2, 'barrel', 1); place(W - 2, top, 'pot', 1);
     for (let y = 4; y <= 6; y++) for (let x = cx - 2; x <= cx; x++) if (free(x, y)) m.glyph[y * W + x] = G.rug;
+  } else if (kind === 'worldtree') {
+    for (let t = 0; t < 30; t++) place(1 + Math.floor(R() * (W - 2)), 2 + Math.floor(R() * (H - 3)), R() < 0.5 ? 'glowShroom' : R() < 0.5 ? 'glowShroomPurple' : 'rootDark', 0);
+    for (const [ox, oy] of [[-7, -5], [7, -5], [-9, 2], [9, 2], [-4, 6], [4, 6]]) place(cx + ox, cy + oy, 'lanternBlue', 1);
+    place(cx, cy - 2, 'crystalBigLit', 1); place(cx - 2, cy - 1, 'crystalDim', 1); place(cx + 2, cy - 1, 'crystalDim', 1);
+    place(cx - 6, cy, 'bookshelf', 1); place(cx + 6, cy, 'bookshelf', 1);
+    place(cx + 5, cy + 3, 'table', 1); place(cx + 4, cy + 3, 'candle', 1); place(cx - 5, cy + 3, 'pot', 1);
+    place(cx + 8, cy - 3, 'stairs', 1); place(cx - 1, cy + 4, 'chest', 1);
+  } else if (kind === 'castle') {
+    for (let x = 2; x < W - 2; x += 3) wallTop(x, x === cx ? 'banner' : (x % 2 ? 'torch' : 'banner'));
+    place(cx, 3, 'throne', 1); place(cx - 2, 3, 'brazier', 1); place(cx + 2, 3, 'brazier', 1);
+    place(cx + 4, 3, 'chest', 1); place(cx - 4, 3, 'chest', 1);
+    for (let y = 4; y < H - 1; y++) if (free(cx, y) || (y >= dy - 2 && floor[y * W + cx])) m.glyph[y * W + cx] = G.rug;
+    for (let y = 6; y < H - 3; y += 3) { place(cx - 4, y, 'pillar', 1); place(cx + 4, y, 'pillar', 1); }
+    for (const sx of [3, W - 4]) { place(sx, 7, 'table', 1); place(sx, 6, 'candle', 1); place(sx, 12, 'table', 1); place(sx, 11, 'candle', 1); }
+    place(1, H - 2, 'barrel', 1); place(W - 2, H - 2, 'barrel', 1); place(2, H - 2, 'barrel', 1);
+  } else if (kind === 'lighthouse') {
+    place(cx, cy - 1, 'lantern', 1); place(cx - 3, cy - 2, 'stairs', 1);
+    place(cx + 3, cy - 1, 'table', 1); place(cx + 3, cy - 2, 'candle', 1);
+    place(cx - 3, cy + 2, 'barrel', 1); place(cx + 3, cy + 2, 'anchor', 0); place(cx - 2, cy + 3, 'barrel', 1);
+    for (let t = 0; t < 3; t++) place(1 + Math.floor(R() * (W - 2)), 3 + Math.floor(R() * (H - 4)), 'cobweb', 0);
+  } else if (kind === 'firetemple') {
+    for (const lx of [4, W - 5]) for (let y = 3; y < H - 2; y++) {
+      const i = y * W + lx;
+      if (!floor[i]) continue;
+      m.glyph[i] = G[y % 4 === 1 ? 'lavaLit' : 'lava']; m.solid[i] = 1; m.water[i] = 1; m.bg[i] = 2;
+    }
+    place(cx, 3, 'altar', 1); place(cx - 2, 3, 'brazier', 1); place(cx + 2, 3, 'brazier', 1);
+    for (let y = 6; y < H - 3; y += 4) { place(cx - 3, y, 'pillar', 1); place(cx + 3, y, 'pillar', 1); }
+    for (let y = 5; y < H - 1; y++) if (free(cx, y) || (y >= dy - 2 && floor[y * W + cx])) m.glyph[y * W + cx] = G.runeFloor;
+    place(2, 3, 'vent', 1); place(W - 3, 3, 'vent', 1); place(cx + 1, 4, 'chest', 1);
+    for (let t = 0; t < 6; t++) place(1 + Math.floor(R() * (W - 2)), 4 + Math.floor(R() * (H - 5)), R() < 0.5 ? 'skullBone' : 'rockObsidian', 0);
+  } else if (kind === 'wreck') {
+    for (let x = 2; x < W - 2; x += 4) wallTop(x, 'lantern');
+    for (let t = 0; t < 7; t++) place(1 + Math.floor(R() * (W - 2)), 3 + Math.floor(R() * (H - 4)), 'puddle', 0);
+    place(W - 3, 3, 'chest', 1); place(2, 3, 'barrel', 1); place(3, 3, 'barrel', 1); place(2, 4, 'barrel', 1);
+    place(W - 4, H - 3, 'anchor', 0); place(cx, 4, 'table', 1); place(cx + 1, 4, 'candle', 1);
+    for (let t = 0; t < 4; t++) place(1 + Math.floor(R() * (W - 2)), 3 + Math.floor(R() * (H - 4)), R() < 0.5 ? 'cobweb' : 'bone', 0);
+  } else if (kind === 'witch') {
+    wallTop(2, 'shelf'); wallTop(W - 3, 'bookshelf'); wallTop(cx, 'shelf');
+    place(cx, 5, 'cauldron', 1);
+    for (const [x, y] of [[2, 3], [W - 3, 3], [2, H - 3], [W - 3, H - 3]]) place(x, y, R() < 0.5 ? 'pumpkin' : 'candle', 1);
+    for (let t = 0; t < 6; t++) place(1 + Math.floor(R() * (W - 2)), 3 + Math.floor(R() * (H - 4)), R() < 0.5 ? 'potion' : 'skull', 0);
+    place(W - 4, 6, 'table', 1); place(W - 4, 5, 'orb', 1);
   } else if (kind === 'hollow') {
     for (let t = 0; t < 14; t++) place(1 + Math.floor(R() * (W - 2)), 2 + Math.floor(R() * (H - 3)), R() < 0.6 ? 'glowShroom' : 'mushBrown', 0);
     for (let t = 0; t < 10; t++) place(1 + Math.floor(R() * (W - 2)), 2 + Math.floor(R() * (H - 3)), 'rootDark', 0);
@@ -340,7 +446,10 @@ function genRoom(seed, kind) {
   }
   ensureReachable(m, floor);
   if (kind === 'house' && R() < 0.8) spawnInteriorCreatures(m, R, ['c_cat'], 1);
-  if (kind === 'hollow') spawnInteriorCreatures(m, R, ['c_frog', 'c_slime'], 2);
+  if (kind === 'hollow' || kind === 'worldtree') spawnInteriorCreatures(m, R, ['c_frog', 'c_slime', 'c_rabbit'], kind === 'hollow' ? 2 : 5);
+  if (kind === 'witch') spawnInteriorCreatures(m, R, ['c_cat', 'c_bat'], 2);
+  if (kind === 'wreck') spawnInteriorCreatures(m, R, ['c_octo', 'c_frog'], 2);
+  if (kind === 'castle') spawnInteriorCreatures(m, R, ['c_cat', 'c_ghost'], 2);
   m.finalize();
   return m;
 }

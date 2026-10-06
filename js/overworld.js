@@ -4,13 +4,15 @@
 // rivers -> per-biome glyph fill -> points of interest -> A* road network.
 // ---------------------------------------------------------------------------
 
-const B = { OCEAN: 0, PLAINS: 1, GRASS: 2, FOREST: 3, TAIGA: 4, LAKE: 5, DUNES: 6, MOUNT: 7, SNOW: 8, SPOOKY: 9, MUSH: 10, MARSH: 11, PINK: 12 };
-const BG_LAKE = 13, BG_RIVER = 14, BG_VOID = 15, BG_REDWATER = 16, BG_ICE = 17, BG_PLAZA = 18;
+const B = { OCEAN: 0, PLAINS: 1, GRASS: 2, FOREST: 3, TAIGA: 4, LAKE: 5, DUNES: 6, MOUNT: 7, SNOW: 8, SPOOKY: 9, MUSH: 10, MARSH: 11, PINK: 12,
+  VOLCANO: 13, CRYSTAL: 14, AUTUMN: 15 };
+const BG_LAKE = 16, BG_RIVER = 17, BG_VOID = 18, BG_REDWATER = 19, BG_ICE = 20, BG_PLAZA = 21, BG_LAVA = 22;
 const OW_BG = ['#030710', '#060708', '#060b07', '#050b07', '#0b1310', '#04080f', '#0d0805', '#08080a', '#0b0e13', '#03070a',
-  '#090c05', '#0c0507', '#0e070b', '#061226', '#061328', '#000000', '#1c0609', '#0d1828', '#0b0a08'];
+  '#090c05', '#0c0507', '#0e070b', '#0e0605', '#09071a', '#0c0805',
+  '#061226', '#061328', '#000000', '#1c0609', '#0d1828', '#0b0a08', '#2a0a04'];
 
 // Ambient multiplier per biome (spooky forests are darker, etc.)
-const BIOME_AMB = [1, 1, 1, 0.92, 0.86, 1, 1.05, 0.95, 1.05, 0.55, 0.9, 0.8, 1];
+const BIOME_AMB = [1, 1, 1, 0.92, 0.86, 1, 1.05, 0.95, 1.05, 0.55, 0.9, 0.8, 1, 0.8, 0.65, 0.95];
 
 const CREATURE_TABLE = {
   [B.PLAINS]: ['c_rabbit', 'c_bird', 'c_cat'], [B.GRASS]: ['c_rabbit', 'c_deer', 'c_bird'],
@@ -18,6 +20,8 @@ const CREATURE_TABLE = {
   [B.LAKE]: ['c_frog', 'c_octo'], [B.DUNES]: ['c_lizard', 'c_dragon'], [B.MOUNT]: ['c_dragon', 'c_bird'],
   [B.SNOW]: ['c_rabbit', 'c_bear'], [B.SPOOKY]: ['c_ghost', 'c_bat', 'c_spider'], [B.MUSH]: ['c_frog', 'c_slime'],
   [B.MARSH]: ['c_frog', 'c_bird'], [B.PINK]: ['c_octo', 'c_cat', 'c_rabbit'],
+  [B.VOLCANO]: ['c_lizard', 'c_dragon', 'c_bat'], [B.CRYSTAL]: ['c_slime', 'c_ghost', 'c_rabbit'],
+  [B.AUTUMN]: ['c_deer', 'c_fox', 'c_bear', 'c_cat'],
 };
 
 function bfsDist(W, H, isSource, passable, cap) {
@@ -37,7 +41,7 @@ function bfsDist(W, H, isSource, passable, cap) {
 }
 
 function genOverworld(seed) {
-  const W = 520, H = 520, N = W * H;
+  const W = 800, H = 800, N = W * H;
   const R = mulberry32(seed);
   const m = new TileMap(W, H, { bgPal: OW_BG, kind: 'over' });
   const rnd = (x, y, k) => hash2(x, y, seed * 31 + k);
@@ -47,9 +51,12 @@ function genOverworld(seed) {
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const nx = (x + 0.5) / W * 2 - 1, ny = (y + 0.5) / H * 2 - 1;
     const d = Math.sqrt(nx * nx * 1.05 + ny * ny);
-    const e = fbm(x * 0.011, y * 0.011, seed + 1, 5);
-    const border = smoothstep(0.82, 0.97, Math.max(Math.abs(nx), Math.abs(ny)));
-    land[y * W + x] = (e + (1 - d) * 0.9 - 0.74 - border * 0.6) > 0 ? 1 : 0;
+    const e = fbm(x * 0.008, y * 0.008, seed + 1, 6);
+    const isl = fbm(x * 0.02, y * 0.02, seed + 2, 3);
+    const border = smoothstep(0.86, 0.98, Math.max(Math.abs(nx), Math.abs(ny)));
+    // a main continent plus outlying islands
+    const v = Math.max(e + (1 - d) * 0.85 - 0.76, (isl - 0.66) * 1.4 + (1 - d) * 0.12 - 0.02);
+    land[y * W + x] = (v - border * 0.6) > 0 ? 1 : 0;
   }
   // keep the main landmass + reasonably sized islands
   const comp = new Int32Array(N).fill(-1);
@@ -70,7 +77,8 @@ function genOverworld(seed) {
   let mainId = 0;
   for (let k = 1; k < sizes.length; k++) if (sizes[k] > sizes[mainId]) mainId = k;
   for (let i = 0; i < N; i++) if (land[i] && sizes[comp[i]] < 40) land[i] = 0;
-  const mainland = (i) => comp[i] === mainId && land[i];
+  // the main continent and any island big enough to hold places
+  const mainland = (i) => land[i] && (comp[i] === mainId || sizes[comp[i]] >= 1200);
 
   const dOcean = bfsDist(W, H, (i) => !land[i], () => true, 120);
   const dLand = bfsDist(W, H, (i) => land[i] === 1, () => true, 30);
@@ -138,8 +146,11 @@ function genOverworld(seed) {
     }
   };
   const countB = (b) => landRegs.filter((k) => regB[k] === b).length;
-  convert(B.SPOOKY, [B.FOREST, B.PLAINS, B.TAIGA], 4);
-  convert(B.PINK, [B.PLAINS, B.GRASS, B.MUSH], 3);
+  convert(B.SPOOKY, [B.FOREST, B.PLAINS, B.TAIGA], 6);
+  convert(B.PINK, [B.PLAINS, B.GRASS, B.MUSH], 4);
+  convert(B.VOLCANO, [B.MOUNT, B.DUNES, B.PLAINS, B.GRASS], 4);
+  convert(B.CRYSTAL, [B.SNOW, B.TAIGA, B.PLAINS, B.MUSH, B.FOREST], 3);
+  convert(B.AUTUMN, [B.FOREST, B.GRASS, B.PLAINS], 6);
   if (countB(B.MUSH) < 3) convert(B.MUSH, [B.PLAINS, B.GRASS, B.FOREST], 3 - countB(B.MUSH));
   if (countB(B.MARSH) < 2) convert(B.MARSH, [B.PLAINS, B.GRASS], 2 - countB(B.MARSH));
   if (countB(B.LAKE) < 3) convert(B.LAKE, [B.PLAINS, B.GRASS, B.FOREST], 3 - countB(B.LAKE));
@@ -158,10 +169,10 @@ function genOverworld(seed) {
   // 3. Rivers -------------------------------------------------------------
   {
     const sources = [];
-    for (let t = 0; t < 4000 && sources.length < 6; t++) {
+    for (let t = 0; t < 8000 && sources.length < 11; t++) {
       const x = 20 + Math.floor(R() * (W - 40)), y = 20 + Math.floor(R() * (H - 40)), i = y * W + x;
       if (!mainland(i) || dOcean[i] < 35) continue;
-      if (biome[i] !== B.MOUNT && biome[i] !== B.SNOW && biome[i] !== B.TAIGA) continue;
+      if (biome[i] !== B.MOUNT && biome[i] !== B.SNOW && biome[i] !== B.TAIGA && biome[i] !== B.VOLCANO) continue;
       if (sources.some((s) => Math.abs(s[0] - x) + Math.abs(s[1] - y) < 60)) continue;
       sources.push([x, y]);
     }
@@ -207,6 +218,11 @@ function genOverworld(seed) {
       bg[i] = dl < 14 ? B.OCEAN : BG_VOID;
       const p = dl <= 1 ? 0.75 : 0.6 * Math.exp(-(dl - 1) / 4);
       if (r < p) m.glyph[i] = G[dl > 5 ? 'waveDeep' : (r2 < 0.78 ? 'waveOcean' : 'bubbleDim')];
+      continue;
+    }
+    if (water[i] && b === B.VOLCANO) {
+      solid[i] = 1; bg[i] = BG_LAVA;
+      m.glyph[i] = G[rnd(x, y, 9) < 0.15 ? 'lavaLit' : 'lava'];
       continue;
     }
     if (water[i]) {
@@ -334,6 +350,41 @@ function genOverworld(seed) {
         else if (r < 0.06) put(x, y, 'speckPink');
         else if (r < 0.064) put(x, y, 'heartFill');
         break;
+      case B.VOLCANO: {
+        const flow = Math.abs(fbm(x * 0.03, y * 0.03, seed + 50, 3) - 0.5);
+        if ((flow < 0.022 || n2 > 0.7) && ef > 0.2) {
+          water[i] = 1; solid[i] = 1; bg[i] = BG_LAVA;
+          put(x, y, rnd(x, y, 9) < 0.14 ? 'lavaLit' : 'lava', 1);
+        } else if (n > 0.66 && r < 0.75 * ef) put(x, y, r2 < 0.6 ? 'peakBasalt' : 'peakOutlineBasalt', 1);
+        else if (r < 0.012) put(x, y, 'vent', 1);
+        else if (r < 0.03) put(x, y, 'rockObsidian', 1, fl);
+        else if (r < 0.14) put(x, y, r2 < 0.5 ? 'speckAsh' : 'speck2Ash');
+        else if (r < 0.18) put(x, y, 'rubbleBasalt', 0, fl);
+        else if (r < 0.183) put(x, y, 'skullBone');
+        break;
+      }
+      case B.CRYSTAL: {
+        const tp = smoothstep(0.45, 0.6, treeT) * 0.7 * ef;
+        if (r < tp) {
+          const lit = rnd(x, y, 10) < 0.18;
+          put(x, y, r2 < 0.5 ? (lit ? 'crystalBigLit' : 'crystalBig') : (lit ? 'crystalBigCyanLit' : 'crystalBigCyan'), 1, fl);
+        } else if (n2 < 0.38) { if (r < 0.7) put(x, y, 'checkerViolet'); }
+        else if (r < tp + 0.03) put(x, y, 'crystalDim', 1, fl);
+        else if (r < tp + 0.1) put(x, y, 'dotgridViolet');
+        else if (r < tp + 0.16) put(x, y, 'speckViolet');
+        else if (r < tp + 0.17) put(x, y, 'glowShroomPurple', 0, fl);
+        break;
+      }
+      case B.AUTUMN: {
+        const tp = smoothstep(0.4, 0.55, treeT) * 0.85 * ef;
+        if (r < tp) put(x, y, ['treeOrange', 'treeRed', 'treeYellow', 'pineAutumn', 'treeOrange', 'pineOlive'][Math.floor(rnd(x, y, 3) * 6)], 1, fl);
+        else if (r < tp + 0.12) put(x, y, r2 < 0.5 ? 'leaves' : 'leavesRed', 0, fl);
+        else if (r < tp + 0.13) put(x, y, 'pumpkin', 1);
+        else if (r < tp + 0.145) put(x, y, 'mushBrown', 0, fl);
+        else if (n > 0.66 && n2 < 0.45 && r < 0.4 * ef) put(x, y, 'fence', 1);
+        else if (r < tp + 0.18) put(x, y, 'tuftOlive', 0, fl);
+        break;
+      }
     }
   }
   // giant mushrooms (2x2)
@@ -426,8 +477,8 @@ function genOverworld(seed) {
       deco(cx, cy, 3, 'rock', 2, 1);
     },
     cave(cx, cy, poi, type) {
-      const ice = type === 'icecave', dunes = biome[cy * W + cx] === B.DUNES;
-      const pk = ice ? 'pineIce' : dunes ? 'peakOrange' : 'peak';
+      const ice = type === 'icecave', bb = biome[cy * W + cx], dunes = bb === B.DUNES;
+      const pk = ice ? 'pineIce' : dunes ? 'peakOrange' : bb === B.VOLCANO ? 'peakBasalt' : bb === B.CRYSTAL ? 'crystalBigCyan' : 'peak';
       for (const [dx, dy] of [[-1, 0], [1, 0], [-1, -1], [0, -1], [1, -1], [-2, 0], [2, 0]]) {
         const x = cx + dx, y = cy + dy; put(x, y, dy === 0 && Math.abs(dx) === 2 ? 'peakSmall' : pk, 1); reserved[y * W + x] = 1;
       }
@@ -501,6 +552,90 @@ function genOverworld(seed) {
       }
       put(cx, cy, 'rune', 1); reserved[cy * W + cx] = 1;
     },
+    castle(cx, cy, poi) {
+      clearArea(cx, cy, 8);
+      for (let y = cy - 6; y <= cy + 6; y++) for (let x = cx - 7; x <= cx + 7; x++) {
+        if (Math.abs(x - cx) !== 7 && Math.abs(y - cy) !== 6) continue;
+        if (x === cx && y === cy + 6) continue;
+        const corner = Math.abs(x - cx) === 7 && Math.abs(y - cy) === 6;
+        if (corner) structure(x, y, 'tower', 1, 3);
+        else { put(x, y, 'wallStone', 1); reserved[y * W + x] = 1; }
+      }
+      structure(cx - 1, cy, 'keep', 3, 3);
+      addEntrance([[cx, cy]], 'castle', { x: cx, y: cy + 1 }, poi);
+      structure(cx - 1, cy + 5, 'torch', 1, 1); structure(cx + 1, cy + 5, 'torch', 1, 1);
+      for (const [dx, dy] of [[-4, -3], [4, -3], [-4, 3], [4, 3]]) { structure(cx + dx, cy + dy, 'lantern', 1, 1); }
+      for (let k = 0; k < 10; k++) {
+        const x = cx + Math.round((R() - 0.5) * 11), y = cy + Math.round((R() - 0.5) * 9);
+        const i = y * W + x;
+        if (!reserved[i] && !m.glyph[i] && x !== cx) put(x, y, R() < 0.5 ? 'flower' : 'flowerBlue', 0);
+      }
+      poi.local = [{ x: cx, y: cy + 1 }];
+    },
+    lighthouse(cx, cy, poi) {
+      clearArea(cx, cy, 2);
+      structure(cx, cy, 'lighthouse', 1, 4);
+      addEntrance([[cx, cy]], 'lighthouse', { x: cx, y: cy + 1 }, poi);
+      deco(cx, cy, 2.5, 'rock', 2, 1);
+    },
+    wreck(cx, cy, poi) {
+      clearArea(cx, cy, 3);
+      structure(cx - 1, cy, 'wreck', 3, 2);
+      addEntrance([[cx, cy]], 'wreck', { x: cx, y: cy + 1 }, poi);
+      deco(cx, cy, 3, 'barrel', 2, 1);
+      deco(cx, cy, 3, 'anchor', 1, 0);
+      deco(cx, cy, 3, 'bone', 2, 0);
+    },
+    mine(cx, cy, poi) {
+      for (const [dx, dy] of [[-1, 0], [1, 0], [-1, -1], [0, -1], [1, -1], [-2, 0], [2, 0]]) {
+        const x = cx + dx, y = cy + dy; put(x, y, dy === 0 && Math.abs(dx) === 2 ? 'peakSmall' : 'peak', 1); reserved[y * W + x] = 1;
+      }
+      for (let y = cy + 1; y <= cy + 3; y++) for (let x = cx - 1; x <= cx + 1; x++) {
+        const i = y * W + x; if (!reserved[i]) { m.glyph[i] = 0; solid[i] = 0; water[i] = 0; bg[i] = biome[i]; }
+      }
+      put(cx, cy, 'mineMouth', 0);
+      addEntrance([[cx, cy]], 'mine', { x: cx, y: cy + 1 }, poi);
+      put(cx, cy + 1, 'rails', 0); put(cx, cy + 2, 'rails', 0);
+      structure(cx + 1, cy + 1, 'cart', 1, 1);
+      structure(cx - 1, cy + 1, 'lantern', 1, 1);
+      poi.local = [{ x: cx, y: cy + 2 }];
+    },
+    volcano(cx, cy, poi) {
+      clearArea(cx, cy, 6);
+      for (let y = cy - 6; y <= cy + 5; y++) for (let x = cx - 5; x <= cx + 6; x++) {
+        const dx = x - cx - 0.5, dy = (y - cy + 0.5) * 1.15, d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 4.2 || d > 5.6) continue;
+        if (y > cy && x >= cx - 1 && x <= cx + 2) continue;
+        const i = y * W + x;
+        water[i] = 1; solid[i] = 1; bg[i] = BG_LAVA; reserved[i] = 1;
+        m.glyph[i] = G[rnd(x, y, 9) < 0.25 ? 'lavaLit' : 'lava'];
+      }
+      structure(cx, cy, 'fireShrine', 2, 2);
+      addEntrance([[cx, cy], [cx + 1, cy]], 'firetemple', { x: cx, y: cy + 1 }, poi);
+      structure(cx - 1, cy + 1, 'brazier', 1, 1); structure(cx + 2, cy + 1, 'brazier', 1, 1);
+    },
+    worldtree(cx, cy, poi) {
+      clearArea(cx, cy - 2, 7);
+      structure(cx - 2, cy, 'worldTree', 5, 6);
+      addEntrance([[cx, cy]], 'worldtree', { x: cx, y: cy + 1 }, poi);
+      deco(cx, cy, 6, 'glowShroom', 8, 0);
+      deco(cx, cy, 6, 'lanternBlue', 3, 1);
+      deco(cx, cy, 6, 'flower', 6, 0);
+    },
+    ribs(cx, cy) {
+      clearArea(cx, cy, 4);
+      structure(cx - 2, cy, 'ribs', 4, 2);
+      deco(cx, cy, 4, 'bone', 4, 0);
+      deco(cx, cy, 4, 'skullBone', 2, 0);
+    },
+    witch(cx, cy, poi) {
+      clearArea(cx, cy, 4);
+      structure(cx, cy, 'witchHut', 2, 2);
+      addEntrance([[cx + 1, cy]], 'witch', { x: cx + 1, y: cy + 1 }, poi);
+      structure(cx - 1, cy, 'cauldron', 1, 1);
+      deco(cx, cy, 3.5, 'pumpkin', 3, 1);
+      deco(cx, cy, 3.5, 'skull', 2, 0);
+    },
     oasis(cx, cy) {
       clearArea(cx, cy, 5);
       for (let y = cy - 3; y <= cy; y++) for (let x = cx - 2; x <= cx + 2; x++) {
@@ -515,29 +650,45 @@ function genOverworld(seed) {
     },
   };
   const POI_DEFS = [
-    { type: 'village', n: 9, biomes: [B.PLAINS, B.GRASS, B.FOREST, B.TAIGA], dist: 46, rad: 8 },
-    { type: 'temple', n: 3, biomes: [B.MARSH], dist: 30, rad: 5 },
-    { type: 'shrine', n: 3, biomes: [B.PINK], dist: 30, rad: 5 },
-    { type: 'hollow', n: 5, biomes: [B.MUSH], dist: 26, rad: 5 },
-    { type: 'crypt', n: 6, biomes: [B.SPOOKY], dist: 22, rad: 5 },
-    { type: 'cave', n: 13, biomes: [B.MOUNT, B.DUNES], dist: 26, rad: 2, cave: true },
-    { type: 'icecave', n: 5, biomes: [B.SNOW], dist: 26, rad: 2, cave: true },
-    { type: 'oasis', n: 4, biomes: [B.DUNES], dist: 34, rad: 5 },
-    { type: 'tower', n: 7, biomes: [B.MOUNT, B.GRASS, B.PLAINS, B.SNOW, B.TAIGA], dist: 34, rad: 3 },
-    { type: 'ruins', n: 11, biomes: [B.PLAINS, B.GRASS, B.DUNES, B.SPOOKY, B.FOREST, B.MARSH, B.SNOW], dist: 28, rad: 4 },
-    { type: 'stones', n: 6, biomes: [B.GRASS, B.PLAINS, B.TAIGA, B.MUSH], dist: 34, rad: 5 },
-    { type: 'camp', n: 18, biomes: [B.TAIGA, B.FOREST, B.PLAINS, B.GRASS, B.SNOW, B.DUNES], dist: 24, rad: 4 },
+    { type: 'castle', n: 5, biomes: [B.GRASS, B.PLAINS, B.AUTUMN, B.FOREST], dist: 90, rad: 9, hub: [0, 7] },
+    { type: 'worldtree', n: 2, biomes: [B.FOREST, B.MUSH, B.AUTUMN, B.TAIGA], dist: 200, rad: 7 },
+    { type: 'village', n: 16, biomes: [B.PLAINS, B.GRASS, B.FOREST, B.TAIGA, B.AUTUMN], dist: 50, rad: 8, hub: [0, 0] },
+    { type: 'volcano', n: 4, biomes: [B.VOLCANO], dist: 50, rad: 6 },
+    { type: 'temple', n: 4, biomes: [B.MARSH], dist: 30, rad: 5 },
+    { type: 'shrine', n: 4, biomes: [B.PINK], dist: 30, rad: 5 },
+    { type: 'hollow', n: 7, biomes: [B.MUSH], dist: 26, rad: 5 },
+    { type: 'crypt', n: 9, biomes: [B.SPOOKY], dist: 22, rad: 5 },
+    { type: 'witch', n: 6, biomes: [B.SPOOKY, B.MARSH, B.AUTUMN], dist: 40, rad: 4, hub: [1, 1] },
+    { type: 'lighthouse', n: 8, coast: true, dist: 70, hub: [0, 1] },
+    { type: 'wreck', n: 7, coast: true, dist: 60, hub: [0, 1] },
+    { type: 'mine', n: 10, biomes: [B.MOUNT, B.SNOW, B.VOLCANO], dist: 40, rad: 2, cave: true, hub: [0, 3] },
+    { type: 'cave', n: 20, biomes: [B.MOUNT, B.DUNES, B.VOLCANO, B.CRYSTAL], dist: 26, rad: 2, cave: true },
+    { type: 'icecave', n: 8, biomes: [B.SNOW], dist: 26, rad: 2, cave: true },
+    { type: 'oasis', n: 6, biomes: [B.DUNES], dist: 34, rad: 5, hub: [0, 2] },
+    { type: 'ribs', n: 5, biomes: [B.DUNES, B.VOLCANO], dist: 50, rad: 4 },
+    { type: 'tower', n: 10, biomes: [B.MOUNT, B.GRASS, B.PLAINS, B.SNOW, B.TAIGA, B.CRYSTAL], dist: 34, rad: 3 },
+    { type: 'ruins', n: 18, biomes: [B.PLAINS, B.GRASS, B.DUNES, B.SPOOKY, B.FOREST, B.MARSH, B.SNOW, B.AUTUMN, B.VOLCANO], dist: 28, rad: 4 },
+    { type: 'stones', n: 9, biomes: [B.GRASS, B.PLAINS, B.TAIGA, B.MUSH, B.CRYSTAL], dist: 34, rad: 5 },
+    { type: 'camp', n: 30, biomes: [B.TAIGA, B.FOREST, B.PLAINS, B.GRASS, B.SNOW, B.DUNES, B.AUTUMN], dist: 24, rad: 4 },
   ];
   for (const def of POI_DEFS) {
     let made = 0;
-    for (let t = 0; t < 6000 && made < def.n; t++) {
-      const cx = 8 + Math.floor(R() * (W - 16)), cy = 8 + Math.floor(R() * (H - 16));
+    for (let t = 0; t < 12000 && made < def.n; t++) {
+      const cx = 10 + Math.floor(R() * (W - 20)), cy = 10 + Math.floor(R() * (H - 20));
       const ci = cy * W + cx;
       if (!mainland(ci) || water[ci] || reserved[ci]) continue;
-      if (def.biomes.indexOf(biome[ci]) < 0 || edge[ci] < (def.cave ? 2 : 4)) continue;
       if (pois.some((p) => Math.hypot(p.x - cx, p.y - cy) < (p.type === def.type ? def.dist : 16))) continue;
+      if (def.coast) {
+        // on the shore: open sea just below, dry land for the structure
+        if (dOcean[ci] < 1 || dOcean[ci] > 2) continue;
+        let ok = true;
+        for (let y = cy - 4; y <= cy + 1 && ok; y++) for (let x = cx - 1; x <= cx + 1; x++) {
+          const i = y * W + x; if (!land[i] || water[i] || reserved[i]) { ok = false; break; }
+        }
+        if (!ok) continue;
+      } else if (def.biomes.indexOf(biome[ci]) < 0 || edge[ci] < (def.cave ? 2 : 4)) continue;
       let ok = true;
-      const rr = def.rad;
+      const rr = def.coast ? -99 : def.rad;
       for (let y = cy - rr - 2; y <= cy + rr + 1 && ok; y++) for (let x = cx - rr; x <= cx + rr; x++) {
         const i = y * W + x;
         if (!mainland(i) || reserved[i] || (water[i] && !def.cave)) { ok = false; break; }
@@ -551,8 +702,7 @@ function genOverworld(seed) {
       }
       if (!ok) continue;
       const poi = { type: def.type, x: cx, y: cy, hub: { x: cx, y: cy + 1 } };
-      if (def.type === 'village') poi.hub = { x: cx, y: cy };
-      if (def.type === 'oasis') poi.hub = { x: cx, y: cy + 2 };
+      if (def.hub) poi.hub = { x: cx + def.hub[0], y: cy + def.hub[1] };
       pois.push(poi);
       STAMPS[def.type](cx, cy, poi, def.type);
       const hi = poi.hub.y * W + poi.hub.x;
@@ -565,7 +715,8 @@ function genOverworld(seed) {
   const cost = new Float32Array(N);
   const PEAKS = new Set(['peak', 'peakOutline', 'peakSnow', 'peakOrange', 'peakOutlineOrange'].map((n) => G[n]));
   for (let i = 0; i < N; i++) {
-    if (!land[i] || reserved[i]) cost[i] = Infinity;
+    if (reserved[i] || (!land[i] && dLand[i] > 14)) cost[i] = Infinity;
+    else if (!land[i]) cost[i] = 40; // causeway out to an island
     else if (water[i]) cost[i] = 16;
     else if (solid[i]) cost[i] = PEAKS.has(m.glyph[i] & 0x7fff) ? 22 : 5;
     else cost[i] = 1.4;
@@ -581,7 +732,7 @@ function genOverworld(seed) {
     gS[start] = 0; seen[start] = stamp; dirA[start] = -1; came[start] = -1;
     heap.push(0, start);
     let iter = 0;
-    while (heap.size && iter++ < 400000) {
+    while (heap.size && iter++ < 1500000) {
       const cur = heap.pop();
       if (closed[cur] === stamp) continue;
       closed[cur] = stamp;
@@ -663,7 +814,7 @@ function genOverworld(seed) {
   }
 
   // 7. Creatures ----------------------------------------------------------------
-  for (let t = 0; t < 14000 && m.creatures.length < 1000; t++) {
+  for (let t = 0; t < 40000 && m.creatures.length < 2400; t++) {
     const x = Math.floor(R() * W), y = Math.floor(R() * H), i = y * W + x;
     if (!land[i] || solid[i] || water[i] || road[i]) continue;
     const list = CREATURE_TABLE[biome[i]];
