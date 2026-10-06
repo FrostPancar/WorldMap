@@ -396,8 +396,14 @@ variant('rubbleSnow', 'rubble', [P.ice]);
 variant('rockBlue', 'rock', ['#5a6a8a', '#3a4660']);
 variant('rockOrange', 'rock', [P.orangeD, '#7a3a14']);
 variant('skullDark', 'skull', [P.tealL]);
-variant('skullRed', 'skull', [P.red], { emit: true, light: { c: P.red, r: 20, i: 0.6, f: 0.2, ox: 4, oy: 4 } });
 variant('skullBone', 'skull', [P.bone]);
+// little blue spirits that drift and flicker over graveyards
+defGlyph('spirit', [
+  ['..111...', '.12221..', '1232321.', '1222221.', '.12221..', '..1221..', '...11.1.', '....1...'],
+  ['........', '..111...', '.12221..', '1232321.', '1222221.', '.12221..', '.1221...', '.1.1....'],
+  ['........', '..111...', '.12221..', '1232321.', '1222221.', '.12221..', '..1221..', '..1..1..'],
+  ['..111...', '.12221..', '1232321.', '1222221.', '.12221..', '..1221..', '..11....', '.1......'],
+], ['#3a9aff', '#bff0ff', '#163a8a'], { anim: 4, emit: [1, 2], light: { c: '#4ab8ff', r: 26, i: 0.75, f: 0.35, ox: 4, oy: 4 } });
 variant('speckTeal', 'speck', [P.tealD]);
 variant('speck2Teal', 'speck2', [P.tealD]);
 variant('speckOrange', 'speck', ['#6a3a14']);
@@ -699,4 +705,18 @@ Object.assign(MAP_ICONS, {
   wreck: ['..1..', '..11.', '..1..', '11111', '.111.'],
   ribs: ['1.1.1', '1.1.1', '11111', '.....', '.....'],
   witch: ['..1..', '.111.', '11111', '.1.1.', '.111.'],
+  arena: ['1.1.1', '11111', '1...1', '1.1.1', '11111'],
 });
+
+// Boss arena gate: a small colosseum facade with a dark central archway.
+defGlyph('arenaGate', rowsFrom(24, 16, (x, y) => {
+  if (y === 0) return x % 3 === 0 ? '1' : '';
+  if (y === 1) return '1';
+  if (y === 2 || y === 8 || y === 15) return '2';
+  if ((x === 4 || x === 19) && y >= 3 && y <= 7) return '5';
+  if (y >= 3 && y <= 7) return (x % 4 === 1 || x % 4 === 2) && y >= 4 ? '3' : '1';
+  if (x >= 9 && x <= 14) return y >= 10 || (y === 9 && x >= 10 && x <= 13) ? '3' : '1';
+  if ((x === 7 || x === 16) && y === 10) return '4';
+  if ((x % 4 === 1 || x % 4 === 2) && y >= 11 && y <= 14 && (x < 7 || x > 16)) return '3';
+  return (x + y) % 7 === 0 ? '2' : '1';
+}), [P.stone, P.stoneD, '#0a0a12', P.fireY, P.red], { emit: [4], light: { c: '#ffb050', r: 46, i: 0.9, f: 0.15, ox: 12, oy: -2 } });

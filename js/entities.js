@@ -15,9 +15,11 @@ function makeCreature(name, x, y, biome, R) {
 
 function updateCreature(c, m, dt, pl) {
   // pets follow the player, enemies chase when close, everything else wanders
+  if (c.npc) { c.px = c.x * TS; c.py = c.y * TS; return; } // traders stay at their post
   const pdx = pl.x - c.x, pdy = pl.y - c.y, pd = Math.abs(pdx) + Math.abs(pdy);
-  const chase = c.enemy && pd < 7, follow = c.pet && pd > 2;
-  const speed = (c.pet ? 7 : chase ? 3.6 : c.speed) * (c.slow > 0 ? 0.4 : 1);
+  // bosses always hunt you; other enemies lose you while you wear a possessed body
+  const chase = c.enemy && (c.boss ? pd < 40 : pd < 7 && !Powers.possess), follow = c.pet && pd > 2;
+  const speed = (c.pet ? 7 : c.boss ? (c.dash > 0 ? 9 : c.boss.spd) : chase ? 3.6 : c.speed) * (c.slow > 0 ? 0.4 : 1);
   if (c.moving) {
     c.t += dt * speed;
     if (c.t >= 1) { c.t = 1; c.moving = false; c.wait = (chase || follow) ? 0.05 : 0.2 + Math.random() * (Math.random() < 0.3 ? 4 : 1.2); }
@@ -85,6 +87,7 @@ class Player {
     this.face = dir;
     const [dx, dy] = DIRS[dir];
     const nx = this.x + dx, ny = this.y + dy;
+    if (this.gate && !this.gate(nx, ny)) return false;
     if (m.blocked(nx, ny)) return false;
     this.fx = this.x; this.fy = this.y; this.tx = nx; this.ty = ny; this.t = 0; this.moving = true;
     return true;

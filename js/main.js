@@ -38,12 +38,13 @@ const input = {
 };
 addEventListener('keydown', (e) => {
   if (e.target && e.target.tagName === 'INPUT') return;
+  if (CoopUI.isOpen() && e.code !== 'Escape') return; // the menu is up: no walking
   const d = KEYMAP[e.code];
   if (d) { if (input.order.indexOf(d) < 0) input.order.push(d); e.preventDefault(); }
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') input.run = true;
   if (e.repeat) return;
   if (e.code === 'KeyM' || e.code === 'Tab') { e.preventDefault(); toggleMap(); }
-  if (e.code === 'Escape') { if (game.mode === 'map') toggleMap(); else CoopUI.toggle(); }
+  if (e.code === 'Escape') { if (game.mode === 'map') toggleMap(); else { CoopUI.toggle(); input.order = []; } return; }
   if (game.mode === 'map') {
     if (e.code === 'KeyE' || e.code === 'Equal' || e.code === 'NumpadAdd') MapView.zoomBy(1);
     if (e.code === 'KeyQ' || e.code === 'Minus' || e.code === 'NumpadSubtract') MapView.zoomBy(-1);
@@ -105,6 +106,7 @@ function toggleMap() {
 // game.stack holds where to return to for every level we have gone down.
 function enterInterior(ent) {
   Sound.sfx('enter');
+  Powers.endPossess(true);
   const p = game.player;
   const back = { map: game.map, x: ent.ret ? ent.ret.x : p.fx, y: ent.ret ? ent.ret.y : p.fy, ent: game.ret };
   fadeTo(() => {
@@ -116,11 +118,12 @@ function enterInterior(ent) {
     game.lockUntil = game.time + 2 + 1 / game.fadeSpeed; // no leaving for 2s once the room is visible
     game.player.place(im.spawn.x, im.spawn.y); game.player.face = 'down';
     particles.length = 0;
-    snapCamera();
+    snapCamera(); game.irisT = game.time;
   });
 }
 function exitInterior() {
   Sound.sfx('exit');
+  Powers.endPossess(true);
   fadeTo(() => {
     const back = game.stack.pop() || { map: game.world.map, x: game.world.start.x, y: game.world.start.y, ent: null };
     Combat.carryPets(game.map, back.map, back.x, back.y);
@@ -128,7 +131,7 @@ function exitInterior() {
     game.lockUntil = back.map === game.world.map ? 0 : game.time + 2 + 1 / game.fadeSpeed;
     game.player.place(back.x, back.y); game.player.face = 'down';
     particles.length = 0;
-    snapCamera();
+    snapCamera(); game.irisT = game.time;
   });
 }
 
@@ -164,7 +167,7 @@ function lightSprite(rgb) {
 function dayState(t) {
   const sun = Math.cos((t - 0.5) * Math.PI * 2) * 0.5 + 0.5;
   const day = smoothstep(0.32, 0.72, sun);
-  const night = [0.24, 0.27, 0.46], noon = [1.0, 0.98, 0.95], dusk = [1.0, 0.56, 0.42];
+  const night = [0.34, 0.37, 0.56], noon = [1.0, 0.98, 0.95], dusk = [1.0, 0.6, 0.48];
   const a = night.map((n, i) => lerp(n, noon[i], day));
   const s = Math.exp(-Math.pow((sun - 0.45) / 0.13, 2)) * 0.55;
   return { amb: a.map((v, i) => lerp(v, dusk[i] * (0.35 + day * 0.6), s)), day };
@@ -196,15 +199,15 @@ function update(dt) {
     const [dx, dy] = DIRS[dir];
     if (m.entr.has((p.y + dy) * m.w + p.x + dx) || m.entr.has((p.ty + dy) * m.w + p.tx + dx)) { if (!p.moving) p.face = dir; dir = null; }
   }
-  if (dir && !p.moving) {
-    const [bx, by] = DIRS[dir], nx = p.x + bx, ny = p.y + by;
-    if (m.inb(nx, ny)) {
-      Combat.tryOpen(nx, ny);
-      // locked doors need a key
-      const le = m.entr.get(ny * m.w + nx);
-      if (Combat.isLocked(le) && !Combat.tryUnlock(le, nx, ny)) { p.face = dir; dir = null; }
-    }
-  }
+  // every step (including ones chained while a key is held) checks what's in
+  // the way: chests open, traders talk, locked doors want keys
+  p.gate = (nx, ny) => {
+    if (!m.inb(nx, ny)) return true;
+    Combat.tryOpen(nx, ny);
+    if (Combat.tryTalk(nx, ny)) return false;
+    const le = m.entr.get(ny * m.w + nx);
+    return !(Combat.isLocked(le) && !Combat.tryUnlock(le, nx, ny));
+  };
   const arrived = p.update(dt, m, dir, input.run || input.touchRun);
   if (arrived) {
     if (m === game.world.map) MapView.reveal(p.x, p.y, 13);
@@ -309,12 +312,36 @@ function render() {
     if (fx) { P.warp = fx.warp || 0; P.hue = fx.hue || 0; P.mono = fx.mono || 0; if (fx.ca) P.ca = 0.38 * (1 + fx.ca); }
   }
   hudCtx.clearRect(0, 0, hudCvs.width, hudCvs.height);
-  if (game.mode !== 'map') Combat.hud(hudCtx, NULLCTX, v.VW);
+  if (game.mode !== 'map') { Combat.hud(hudCtx, NULLCTX, v.VW, v.VH); drawIris(hudCtx, v.VW, v.VH); }
   if (post.ok) post.render(layers.scene.c, layers.light.c, layers.emit.c, P);
   else {
     ctx2d.imageSmoothingEnabled = false;
     ctx2d.drawImage(layers.scene.c, 1, 1, v.VW, v.VH, 0, 0, cvs.width, cvs.height);
   }
+}
+
+// After entering or leaving a place, a ring closes in on the player so you
+// can find yourself at once, with the rest of the screen dimmed at first.
+function drawIris(S, VW, VH) {
+  const e = game.time - (game.irisT === undefined ? -99 : game.irisT);
+  if (e < 0 || e > 1.6) return;
+  const p = game.player, x = p.px + 4 - game.camX, y = p.py + 4 - game.camY;
+  const t = clamp(e / 1.05, 0, 1), ease = 1 - Math.pow(1 - t, 3);
+  const r = lerp(Math.hypot(VW, VH) * 0.65, 9, ease), fade = e > 1.05 ? 1 - (e - 1.05) / 0.55 : 1;
+  S.save();
+  S.globalAlpha = 0.55 * fade * (1 - ease * 0.45);
+  S.fillStyle = '#000';
+  S.beginPath(); S.rect(0, 0, VW + 2, VH + 2); S.arc(x, y, r, 0, Math.PI * 2); S.fill('evenodd');
+  const ring = (rr, col, a) => {
+    S.globalAlpha = a; S.fillStyle = col;
+    const n = Math.max(20, Math.round(rr * 6));
+    for (let k = 0; k < n; k++) { const an = (k / n) * Math.PI * 2; S.fillRect(Math.round(x + Math.cos(an) * rr), Math.round(y + Math.sin(an) * rr), 1, 1); }
+  };
+  ring(r, '#f2f0e8', fade);
+  ring(r + 2, SCARVES[Coop.myColor()], fade * 0.6);
+  // once closed, a couple of pulses mark the spot
+  if (t >= 1) ring(9 + ((e - 1.05) * 30) % 8, '#f2f0e8', fade * 0.5);
+  S.restore();
 }
 
 function renderWorld(S, L, E, P) {
@@ -359,11 +386,13 @@ function renderWorld(S, L, E, P) {
   for (const c of m.creatures) {
     const d = GLYPHS[c.g];
     const lift = d.h - TS + (d.tags.includes('float') ? 3 + Math.round(Math.sin(t * 2.2 + c.ph) * 2) : 0);
-    const px = Math.round(c.px - ox) + (c.hitT > 0 ? Math.round(Math.sin(t * 70 + c.ph)) : 0), py = Math.round(c.py - oy) - lift - (c.hitT > 0.15 ? 1 : 0);
-    if (px < -8 || py < -d.h || px > v.SW || py > v.SH) continue;
+    // wide sprites (bosses) stay centred on their tile
+    const px = Math.round(c.px - ox) - ((d.w - TS) >> 1) + (c.hitT > 0 ? Math.round(Math.sin(t * 70 + c.ph)) : 0), py = Math.round(c.py - oy) - lift - (c.hitT > 0.15 ? 1 : 0);
+    if (px < -d.w || py < -d.h || px > v.SW || py > v.SH) continue;
     const fr = c.moving ? Math.floor(c.t * 2) % 2 : (Math.sin(t * 2 + c.ph) > 0.85 ? 1 : 0);
     S.drawImage(spr(c.g, fr, c.flip), px, py);
     if (d.emit) { E.globalAlpha = 0.6; E.drawImage(spr(c.g, fr, c.flip, true), px, py); E.globalAlpha = 1; }
+    if (c.enemy && d.eyes) { S.drawImage(spr(d.eyes, fr, c.flip), px, py); E.drawImage(spr(d.eyes, fr, c.flip), px, py); }
     if (c.flash > 0) { E.globalAlpha = Math.min(1, c.flash * 2); E.drawImage(spr(c.g, fr, c.flip), px, py); E.globalAlpha = 1; }
   }
   // co-op friends on this map
@@ -386,8 +415,14 @@ function renderWorld(S, L, E, P) {
   }
   // player
   const pf0 = p.sprite()[1];
-  const [pg, pf, pflip] = Coop.sprite(p.face, pf0, Coop.myColor(), Coop.look.ch, p);
-  const ppx = Math.round(p.px - ox) + (p.hitT > 0 ? Math.round(Math.sin(t * 70)) : 0), ppy = Math.round(p.py - oy);
+  let [pg, pf, pflip] = Coop.sprite(p.face, pf0, Coop.myColor(), Coop.look.ch, p);
+  let ppx = Math.round(p.px - ox) + (p.hitT > 0 ? Math.round(Math.sin(t * 70)) : 0), ppy = Math.round(p.py - oy);
+  if (Powers.possess) {
+    // shadow-stepped into a creature: you are drawn as it
+    const cr = Powers.possess.c, d = GLYPHS[cr.g];
+    if (p.face === 'left' || p.face === 'right') cr.flip = p.face === 'left';
+    pg = cr.g; pf = pf0; pflip = cr.flip; ppy -= d.h - TS; ppx -= (d.w - TS) >> 1;
+  }
   S.drawImage(spr(pg, pf, pflip), ppx, ppy);
   if (p.hitT > 0) { E.globalAlpha = Math.min(1, p.hitT * 3); E.drawImage(spr(pg, pf, pflip), ppx, ppy); E.globalAlpha = 1; }
   E.globalAlpha = 0.22; E.drawImage(spr(pg, pf, pflip), ppx, ppy); E.globalAlpha = 1;
@@ -404,7 +439,12 @@ function renderWorld(S, L, E, P) {
     amb = ds.amb.map((a) => a * lerp(game.bamb, 1, day * 0.6));
     lightK = 1 - day * 0.7;
     P.emitK = 0.5 + 0.5 * (1 - day);
-  } else { amb = m.ambient; lightK = m.dream ? m.dream.light : 1; }
+    amb = amb.map((a) => Math.min(1.05, a * 1.05 + 0.04));
+  } else {
+    // indoors gets a floor of light so rooms are never pitch black
+    amb = m.ambient.map((a) => a < 0.56 ? a + (0.56 - a) * 0.6 : a);
+    lightK = m.dream ? m.dream.light : 1;
+  }
   P.amb = amb;
   L.globalCompositeOperation = 'source-over';
   L.fillStyle = `rgb(${amb[0] * 127.5 | 0},${amb[1] * 127.5 | 0},${amb[2] * 127.5 | 0})`;
@@ -428,7 +468,7 @@ function renderWorld(S, L, E, P) {
     }
   }
   // the player carries a soft glow
-  drawLight(p.px + 4, p.py + 4, [190, 220, 255], over ? 46 : 52, over ? 0.9 * (1 - day * 0.8) : 1.1 * lightK);
+  drawLight(p.px + 4, p.py + 4, [190, 220, 255], over ? 52 : 62, over ? 1 * (1 - day * 0.8) : 1.2 * lightK);
   for (const l of Powers.lights) drawLight(l.x, l.y, l.rgb, l.r, l.i);
   for (const f of friends) drawLight(f.px + 4, f.py + 4, [190, 220, 255], over ? 46 : 52, over ? 0.9 * (1 - day * 0.8) : 1.1 * lightK);
   L.globalAlpha = 1; L.globalCompositeOperation = 'source-over';
@@ -448,6 +488,7 @@ function boot() {
   const seed = parseInt(q.get('seed') || '1337', 10) >>> 0;
   resize();
   const t0 = performance.now();
+  game.irisT = 0.4;
   game.world = genOverworld(seed);
   game.map = game.world.map;
   MapView.init(game.world);

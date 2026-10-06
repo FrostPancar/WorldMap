@@ -25,16 +25,54 @@ function genInterior(ent) {
     case 'house': case 'hollow': case 'temple': case 'tower': case 'castle': case 'lighthouse':
     case 'firetemple': case 'worldtree': case 'wreck': case 'witch':
       m = genRoom(seed, ent.type); break;
+    case 'arena': m = genArena(seed, ent); break;
     default: m = genCave(seed, false, null, depth);
   }
-  applyDream(m, ent, seed);
+  markWalls(m);
+  if (ent.type !== 'arena') applyDream(m, ent, seed);
   seedInteriorOrb(m, m.dream.name, seed);
-  seedInteriorItems(m, ent, seed);
+  if (ent.type !== 'arena') seedInteriorItems(m, ent, seed);
+  if (HOMEY[ent.type]) {
+    // homes are safe: no enemies, and about half have a special trader
+    m.creatures = m.creatures.filter((c) => !ENEMY_DEF[GLYPHS[c.g].name]);
+    if (hash2(ent.id | 0, 41, ent.seed) < 0.5) addTrader(m, seed);
+  }
   Combat.number(m);
   m.finalize();
   if (depth) m.ambient = m.ambient.map((a) => a * Math.pow(0.8, depth));
   if (DEEP[ent.type] && depth < DEEP_MAX) addStairsDown(m, ent, depth, seed);
   return m;
+}
+
+// Homely interiors: never any enemies inside.
+const HOMEY = { house: 1, hollow: 1, witch: 1, lighthouse: 1 };
+
+// Wall cells (before any dream re-skin) so the baker can rim them with a
+// light edge where they meet the floor; dark rooms stay readable.
+function markWalls(m) {
+  if (m.wall) return;
+  m.wall = new Uint8Array(m.w * m.h);
+  for (let i = 0; i < m.w * m.h; i++) m.wall[i] = m.bg[i] !== 0 && !m.water[i] && !m.entr.has(i) ? 1 : 0;
+}
+
+// A trader stands somewhere roomy (all eight neighbours open) away from the door.
+function addTrader(m, seed) {
+  const R = mulberry32(seed ^ 0x2b7e1516), W = m.w, cand = [];
+  for (let y = 2; y < m.h - 2; y++) for (let x = 2; x < W - 2; x++) {
+    if (Math.abs(x - m.spawn.x) + Math.abs(y - m.spawn.y) < 3) continue;
+    let ok = true;
+    for (let j = -1; j <= 1 && ok; j++) for (let k = -1; k <= 1; k++) {
+      const i = (y + j) * W + x + k;
+      if (m.solid[i] || m.entr.has(i) || m.water[i] || m.wall[i]) { ok = false; break; }
+    }
+    if (ok && !m.creatures.some((c) => c.x === x && c.y === y)) cand.push(y * W + x);
+  }
+  if (!cand.length) return;
+  const i = cand[Math.floor(R() * cand.length)], x = i % W, y = (i / W) | 0;
+  const c = makeCreature('c_trader', x, y, -1, R);
+  c.npc = true; c.flip = x > m.spawn.x;
+  m.creatures.push(c);
+  m.solid[i] = 1;
 }
 
 function addStairsDown(m, ent, depth, seed) {

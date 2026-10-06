@@ -28,7 +28,8 @@ const Touch = {
       #t-run{right:calc(30px + var(--btn) + env(safe-area-inset-right));bottom:calc(22px + env(safe-area-inset-bottom))}
       #t-map{right:calc(30px + var(--btn) + env(safe-area-inset-right));bottom:calc(32px + var(--btn) + env(safe-area-inset-bottom))}
       #t-swap{right:calc(20px + env(safe-area-inset-right));bottom:calc(42px + var(--btn) * 2 + env(safe-area-inset-bottom));font-size:calc(var(--btn)*.34)}
-      body.touch.mapmode #t-atk,body.touch.mapmode #t-swap{display:none}
+      #t-ab{right:calc(30px + var(--btn) + env(safe-area-inset-right));bottom:calc(42px + var(--btn) * 2 + env(safe-area-inset-bottom));font-size:calc(var(--btn)*.34);color:#c08aff;border-color:#c08aff55}
+      body.touch.mapmode #t-atk,body.touch.mapmode #t-swap,body.touch.mapmode #t-ab{display:none}
       #t-beam{right:calc(20px + env(safe-area-inset-right));bottom:calc(32px + var(--btn) + env(safe-area-inset-bottom));
         font-size:calc(var(--btn)*.42);color:#9ad8ff;border-color:#9ad8ff55}
       #t-beam.on{background:#9ad8ff;color:#0b0b10}
@@ -41,13 +42,12 @@ const Touch = {
       body.mapmode #t-map{right:calc(30px + var(--btn) + env(safe-area-inset-right));bottom:calc(22px + env(safe-area-inset-bottom))}
       #touch{--pad:min(42vw,40vh,170px);--btn:min(17vw,16vh,64px)}
       @media (orientation:landscape){#touch{--pad:min(24vw,46vh,170px);--btn:min(11vw,18vh,64px)}}
-      body.touch #coop-btn{bottom:auto;top:calc(14px + env(safe-area-inset-top));left:calc(14px + env(safe-area-inset-left))}
-      body.touch #coop-panel{bottom:auto;top:calc(56px + env(safe-area-inset-top));left:calc(14px + env(safe-area-inset-left));max-height:calc(100% - 80px);overflow:auto}`;
+      body.touch #coop-btn{top:calc(14px + env(safe-area-inset-top));left:calc(14px + env(safe-area-inset-left))}`;
     document.head.appendChild(css);
     const root = document.createElement('div');
     root.id = 'touch';
     root.innerHTML = `<div id="dpad"><i class="up">▲</i><i class="down">▼</i><i class="left">◀</i><i class="right">▶</i></div>
-      <div class="tbtn" id="t-atk">⚔</div><div class="tbtn" id="t-swap">⇄</div><div class="tbtn" id="t-beam">✦</div><div class="tbtn" id="t-run">RUN</div><div class="tbtn" id="t-map">MAP</div>
+      <div class="tbtn" id="t-atk">⚔</div><div class="tbtn" id="t-swap">⇄</div><div class="tbtn" id="t-ab">✧</div><div class="tbtn" id="t-beam">✦</div><div class="tbtn" id="t-run">RUN</div><div class="tbtn" id="t-map">MAP</div>
       <div class="tbtn" id="t-zin">+</div><div class="tbtn" id="t-zout">−</div>`;
     document.body.appendChild(root);
     this.pad = root.querySelector('#dpad');
@@ -74,6 +74,7 @@ const Touch = {
     const tap = (id, fn) => root.querySelector(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
     tap('#t-map', () => toggleMap());
     tap('#t-swap', () => Combat.cycle(1));
+    tap('#t-ab', () => Combat.cycleAbility());
     const atk = root.querySelector('#t-atk');
     atk.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); atk.classList.add('on'); Combat.attack(null); setTimeout(() => atk.classList.remove('on'), 120); });
     const beam = root.querySelector('#t-beam');

@@ -88,6 +88,32 @@ const ENEMY_DEF = {
   c_hydrant: { hp: 6, dmg: 1, beh: 'turret', shot: 'water' }, c_cctv: { hp: 4, dmg: 1, beh: 'turret', shot: 'laser' },
   c_trash: { hp: 4, dmg: 1, beh: 'chase', split: 'c_trashbit' }, c_trashbit: { hp: 1, dmg: 1, beh: 'erratic' },
 };
+// Every enemy gets glowing red eyes: a companion "<name>_eyes" glyph holding
+// only the eye pixels, drawn bright into the scene and the glow layer on top
+// of the sprite. Points are [x, y] in the first (right-facing) frame; for later
+// frames the eyes follow the sprite if it bobs up or down a row.
+const ENEMY_EYES = {
+  c_spider: [[3, 3], [4, 3]], c_bat: [[3, 3], [4, 3]], c_ghost: [[2, 2], [5, 2]], c_slime: [[2, 4], [5, 4]], c_dragon: [[4, 1]],
+  c_eyeball: [[3, 3], [4, 3]], c_shadow: [[2, 2], [5, 2]], c_tvhead: [[2, 4], [4, 4]], c_knight: [[4, 2], [6, 2]], c_knightW: [[4, 2], [6, 2]],
+  c_commuter: [[3, 1], [4, 1]], c_phone: [[2, 2], [4, 2]], c_jogger: [[3, 3], [4, 3]], c_paparazzi: [[3, 2], [4, 2]],
+  c_scooter: [[3, 2], [4, 2]], c_pigeon: [[4, 2]], c_cone: [[2, 2], [4, 2]], c_cart: [[4, 2], [6, 2]], c_roomba: [[3, 3], [5, 3]],
+  c_drone: [[3, 2], [4, 2]], c_hydrant: [[2, 2], [5, 2]], c_cctv: [[6, 1], [7, 1]], c_trash: [[2, 3], [5, 3]], c_trashbit: [[2, 4], [5, 4]],
+};
+function addRedEyes(name, pts) {
+  const d = GLYPHS[G[name]];
+  if (!d) return;
+  const f0 = d.frames[0];
+  const frames = d.frames.map((rows) => {
+    let dy = 0;
+    for (const o of [0, 1, -1, 2, -2]) if (pts.every(([x, y]) => rows[y + o] && rows[y + o][x] === f0[y][x])) { dy = o; break; }
+    const out = rows.map((r) => '.'.repeat(r.length));
+    for (const [x, y] of pts) { const r = out[y + dy]; if (r) out[y + dy] = r.slice(0, x) + '1' + r.slice(x + 1); }
+    return out;
+  });
+  d.eyes = defGlyph(name + '_eyes', frames, ['#ff3022'], { emit: true });
+}
+for (const n in ENEMY_EYES) addRedEyes(n, ENEMY_EYES[n]);
+
 // enemy shots: speed (px/s), damage, cooldown, range (tiles), lobbed or straight
 const SHOTS = {
   flash: { spd: 170, dmg: 1, cd: 2.6, range: 7, col: '#f2f8ff' },

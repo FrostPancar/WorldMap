@@ -12,7 +12,7 @@ const OW_BG = ['#030710', '#060708', '#060b07', '#050b07', '#0b1310', '#04080f',
   '#061226', '#061328', '#000000', '#1c0609', '#0d1828', '#0b0a08', '#2a0a04'];
 
 // Ambient multiplier per biome (spooky forests are darker, etc.)
-const BIOME_AMB = [1, 1, 1, 0.92, 0.86, 1, 1.05, 0.95, 1.05, 0.55, 0.9, 0.8, 1, 0.8, 0.65, 0.95];
+const BIOME_AMB = [1, 1, 1, 0.95, 0.9, 1, 1.05, 0.97, 1.05, 0.7, 0.93, 0.86, 1, 0.86, 0.78, 0.97];
 
 const CREATURE_TABLE = {
   [B.PLAINS]: ['c_rabbit', 'c_bird', 'c_cat'], [B.GRASS]: ['c_rabbit', 'c_deer', 'c_bird'],
@@ -398,6 +398,24 @@ function genOverworld(seed) {
     m.glyph[i] = G.mushroomBig | (rnd(x, y, 6) < 0.5 ? FLIP : 0);
   }
 
+  // thin out lone trees: a tree with at most one tree beside it often just
+  // blocks the way, so a little over half of those are cleared
+  {
+    const TREES = new Set(['pine', 'pineTall', 'pineDark', 'pineOlive', 'pineSnow', 'pineIce', 'pineTallIce', 'pineTallBlue', 'pineTallGreen',
+      'roundTree', 'fir', 'firTall', 'firGreen', 'firTallGreen', 'firTallOlive', 'ditherPine', 'ditherPineTall', 'ditherPineGreen',
+      'ditherPineOlive', 'ditherPineDark', 'ditherPineTallDark', 'deadTreeDark', 'treeOrange', 'treeRed', 'treeYellow', 'pineAutumn',
+      'crystalBig', 'crystalBigLit', 'crystalBigCyan', 'crystalBigCyanLit'].map((n) => G[n]));
+    const lone = [];
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x;
+      if (!TREES.has(m.glyph[i] & 0x7fff)) continue;
+      let n = 0;
+      for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) if ((j || k) && TREES.has(m.glyph[i + j * W + k] & 0x7fff)) n++;
+      if (n <= 1 && rnd(x, y, 13) < 0.55) lone.push(i);
+    }
+    for (const i of lone) { m.glyph[i] = 0; solid[i] = 0; }
+  }
+
   // 5. Points of interest ------------------------------------------------------
   const reserved = new Uint8Array(N);
   const pois = [];
@@ -496,7 +514,7 @@ function genOverworld(seed) {
       addEntrance([[cx, cy], [cx + 1, cy]], 'crypt', { x: cx, y: cy + 1 }, poi);
       deco(cx, cy, 4.5, 'grave', 6, 1);
       deco(cx, cy, 4.5, 'cross', 5, 1);
-      deco(cx, cy, 3, 'skullRed', 2, 1);
+      deco(cx, cy, 3, 'spirit', 3, 0);
     },
     ruins(cx, cy, poi) {
       clearArea(cx, cy, 4);
@@ -636,6 +654,18 @@ function genOverworld(seed) {
       deco(cx, cy, 3.5, 'pumpkin', 3, 1);
       deco(cx, cy, 3.5, 'skull', 2, 0);
     },
+    // boss arena: a colosseum gate on a flagstone plaza, flanked by braziers
+    arena(cx, cy, poi) {
+      clearArea(cx, cy, 6);
+      for (let y = cy - 1; y <= cy + 3; y++) for (let x = cx - 3; x <= cx + 3; x++) {
+        const i = y * W + x;
+        if (!reserved[i] && Math.abs(x - cx) + Math.abs(y - cy - 1) <= 4) bg[i] = BG_PLAZA;
+      }
+      structure(cx - 1, cy, 'arenaGate', 3, 2);
+      addEntrance([[cx, cy]], 'arena', { x: cx, y: cy + 1 }, poi);
+      structure(cx - 2, cy + 1, 'brazier', 1, 1); structure(cx + 2, cy + 1, 'brazier', 1, 1);
+      for (const [dx, dy] of [[-5, -1], [5, -1], [-5, 2], [5, 2]]) { put(cx + dx, cy + dy, 'stone', 1); reserved[(cy + dy) * W + cx + dx] = 1; }
+    },
     oasis(cx, cy) {
       clearArea(cx, cy, 5);
       for (let y = cy - 3; y <= cy; y++) for (let x = cx - 2; x <= cx + 2; x++) {
@@ -705,6 +735,31 @@ function genOverworld(seed) {
       if (def.hub) poi.hub = { x: cx + def.hub[0], y: cy + def.hub[1] };
       pois.push(poi);
       STAMPS[def.type](cx, cy, poi, def.type);
+      const hi = poi.hub.y * W + poi.hub.x;
+      m.glyph[hi] = 0; solid[hi] = 0;
+      made++;
+    }
+  }
+  // seven boss arenas, spread far apart on open ground (their own RNG so the
+  // rest of the world keeps its layout); the spacing relaxes if land is tight
+  {
+    const RA = mulberry32((seed ^ 0xb055a7e5) >>> 0);
+    let made = 0;
+    for (let t = 0; t < 60000 && made < 7; t++) {
+      const relax = t > 30000;
+      const cx = 12 + Math.floor(RA() * (W - 24)), cy = 12 + Math.floor(RA() * (H - 24)), ci = cy * W + cx;
+      if (!mainland(ci) || water[ci] || reserved[ci] || biome[ci] === B.LAKE) continue;
+      if (edge[ci] < (relax ? 1 : 3)) continue;
+      if (pois.some((p) => Math.hypot(p.x - cx, p.y - cy) < (p.type === 'arena' ? (relax ? 60 : 120) : 14))) continue;
+      let ok = true;
+      for (let y = cy - 7; y <= cy + 4 && ok; y++) for (let x = cx - 6; x <= cx + 6; x++) {
+        const i = y * W + x;
+        if (!mainland(i) || reserved[i] || water[i]) { ok = false; break; }
+      }
+      if (!ok) continue;
+      const poi = { type: 'arena', x: cx, y: cy, hub: { x: cx, y: cy + 2 }, boss: made };
+      pois.push(poi);
+      STAMPS.arena(cx, cy, poi);
       const hi = poi.hub.y * W + poi.hub.x;
       m.glyph[hi] = 0; solid[hi] = 0;
       made++;

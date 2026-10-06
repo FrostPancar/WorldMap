@@ -168,20 +168,27 @@ const Coop = {
 };
 
 // ---------------------------------------------------------------------------
-// Minimal settings button: room code, join, copy invite link, status.
+// The Escape menu: resume, restart the world, character, co-op room, sound.
+// On touch screens (no Escape key) a small menu button opens it instead.
 // ---------------------------------------------------------------------------
 const CoopUI = {
   init(seed) {
     this.seed = seed;
     const css = document.createElement('style');
     css.textContent = `
-      #coop-btn{position:fixed;left:14px;bottom:14px;width:34px;height:34px;border:1px solid #3a3a46;background:#0b0b10cc;
-        color:#cfcfc4;font:16px monospace;cursor:pointer;border-radius:6px;display:flex;align-items:center;justify-content:center;z-index:5;padding:0}
+      #coop-btn{position:fixed;left:14px;top:14px;width:34px;height:34px;border:1px solid #3a3a46;background:#0b0b10cc;
+        color:#cfcfc4;font:16px monospace;cursor:pointer;border-radius:6px;display:none;align-items:center;justify-content:center;z-index:5;padding:0}
+      body.touch #coop-btn{display:flex}
       #coop-btn:hover{border-color:#8a8a96}
       #coop-btn .dot{position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:#555}
-      #coop-panel{position:fixed;left:14px;bottom:56px;width:228px;background:#0b0b10f0;border:1px solid #3a3a46;border-radius:6px;
-        color:#cfcfc4;font:12px/1.4 monospace;padding:12px;z-index:5;display:none;box-sizing:border-box}
+      #coop-panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:260px;max-width:calc(100% - 32px);max-height:calc(100% - 32px);
+        overflow:auto;background:#0b0b10f2;border:1px solid #3a3a46;border-radius:6px;
+        color:#cfcfc4;font:12px/1.4 monospace;padding:14px;z-index:6;display:none;box-sizing:border-box}
       #coop-panel.open{display:block}
+      #coop-panel h2{margin:0 0 10px;font:600 13px monospace;letter-spacing:.2em;color:#f2f0e8;text-align:center}
+      #coop-panel hr{border:0;border-top:1px solid #2a2a34;margin:12px 0}
+      #coop-panel button.warn{border-color:#6a3a3a;color:#ffb0a0}
+      #coop-panel button.warn.armed{background:#5a1a1a;border-color:#ff6a5a;color:#fff}
       #coop-panel label{display:block;color:#8a8a96;margin:0 0 4px}
       #coop-panel input{width:100%;box-sizing:border-box;background:#000;border:1px solid #3a3a46;color:#f2f0e8;font:13px monospace;
         padding:6px;border-radius:4px;margin-bottom:8px;text-transform:lowercase}
@@ -201,7 +208,10 @@ const CoopUI = {
     btn.id = 'coop-btn'; btn.title = 'Co-op'; btn.innerHTML = '&#9881;<span class="dot"></span>';
     const panel = document.createElement('div');
     panel.id = 'coop-panel';
-    panel.innerHTML = `<label>Character</label><div class="grid" id="coop-chars"></div><div class="sw" id="coop-cols"></div>
+    panel.innerHTML = `<h2>MENU</h2>
+      <div class="row"><button id="menu-resume">Resume</button></div>
+      <div class="row" style="margin-top:6px"><button id="menu-restart" class="warn">Restart world</button><button id="menu-new" class="warn">New world</button></div>
+      <hr><label>Character</label><div class="grid" id="coop-chars"></div><div class="sw" id="coop-cols"></div>
       <label for="coop-code">Room</label><input id="coop-code" maxlength="24" spellcheck="false" autocomplete="off">
       <div class="row"><button id="coop-join">Join</button><button id="coop-copy">Copy link</button></div>
       <div class="row" style="margin-top:6px"><button id="coop-sound"></button></div>
@@ -212,6 +222,18 @@ const CoopUI = {
     const q = new URLSearchParams(location.search);
     input.value = q.get('room') || Math.random().toString(36).slice(2, 7);
     btn.onclick = () => this.toggle();
+    panel.querySelector('#menu-resume').onclick = () => this.toggle(false);
+    // restarting wipes your progress, so each button wants a second click to confirm
+    const confirmBtn = (el, label, fn) => {
+      let armed = 0;
+      el.onclick = () => {
+        if (armed) { fn(); return; }
+        armed = setTimeout(() => { armed = 0; el.textContent = label; el.classList.remove('armed'); }, 2500);
+        el.textContent = 'Sure? Click again'; el.classList.add('armed'); Sound.sfx('ui');
+      };
+    };
+    confirmBtn(panel.querySelector('#menu-restart'), 'Restart world', () => this.restart(this.seed));
+    confirmBtn(panel.querySelector('#menu-new'), 'New world', () => this.restart(Math.floor(Math.random() * 1e9)));
     this.buildPicker();
     const join = () => {
       const code = input.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
@@ -264,10 +286,22 @@ const CoopUI = {
   },
   toggle(open) {
     const p = this.panel;
-    if (!p || this.btn.style.display === 'none') return;
+    if (!p) return;
     if (open === undefined) open = !p.classList.contains('open');
     p.classList.toggle('open', open);
-    if (open) { const i = p.querySelector('#coop-code'); i.focus(); i.select(); } else document.getElementById('cvs').focus();
+    Sound.sfx('ui');
+    if (open) p.querySelector('#menu-resume').focus(); else document.getElementById('cvs').focus();
+  },
+  isOpen() { return !!(this.panel && this.panel.classList.contains('open')); },
+  // start over: forget items, XP, keys, specials, beaten bosses and unlocked doors
+  restart(seed) {
+    try { for (const k of ['worldmap-combat', 'worldmap-power']) localStorage.removeItem(k); } catch (e) { /* no storage */ }
+    const q = new URLSearchParams(location.search);
+    q.set('seed', seed);
+    if (String(seed) !== String(this.seed)) q.delete('room'); // a different world can't share a room
+    if (Coop.links) Coop.leave();
+    const next = '?' + q.toString();
+    if (next === location.search) location.reload(); else location.search = next;
   },
   go(code, seed) { location.search = `?room=${code}&seed=${seed}`; },
   refresh() {

@@ -61,6 +61,16 @@ defGlyph('chestOpen', ['11111111', '1......1', '........', '22222222', '11133111
 defGlyph('emoteBang', ['...11...', '...11...', '...11...', '...11...', '...11...', '........', '...11...', '........'], ['#ffe84a'], { emit: true });
 defGlyph('lockIcon', ['..111...', '.1...1..', '.1...1..', '1111111.', '1112111.', '1112111.', '1111111.', '........'], [P.gold, '#3a2408'], { emit: [1] });
 defGlyph('icon_beam', ['........', '1.......', '.1......', '..111111', '.1......', '1.......', '........', '........'], ['#9ad8ff'], { emit: true });
+defGlyph('icon_vortex', ['..1111..', '.1....1.', '1..11..1', '1.1..1.1', '1.1.11.1', '1..1...1', '.1....1.', '..111...'], ['#c08aff'], { emit: true });
+defGlyph('icon_shadow', ['....11..', '...1111.', '1..1111.', '.1..11..', '1..1111.', '.1.1111.', '1...11..', '...1..1.'], ['#9a7ae8'], { emit: true });
+defGlyph('icon_star', ['1.......', '.1..1...', '..1111..', '.111111.', '..1111..', '.11.11..', '.1...1..', '........'], ['#ffd84a'], { emit: true });
+// the special trader: a hooded wanderer with a lantern
+defGlyph('c_trader', [
+  ['..111...', '.11111..', '.14341..', '.13331..', '..111...', '.111112.', '1112112.', '1112115.',
+    '1112155.', '.111255.', '.111212.', '.11121..', '.11121..', '111121..', '1111211.', '.222222.'],
+  ['..111...', '.11111..', '.13331..', '.13331..', '..111...', '.111112.', '1112112.', '1112112.',
+    '1112115.', '.111255.', '.111255.', '.11121..', '.11121..', '111121..', '1111211.', '.222222.'],
+], ['#5a3a8a', '#f0c040', '#e0b890', '#1a1024', '#ffd890'], { emit: [5] });
 
 // --- tiny pixel font for the HUD ---------------------------------------------------------
 const FONT = {
@@ -70,7 +80,7 @@ const FONT = {
   S: '.111...1...111.', T: '111.1..1..1..1.', U: '1.11.11.11.1111', V: '1.11.11.11.1.1.', W: '1.11.11111111.1', X: '1.11.1.1.1.11.1',
   Y: '1.11.1.1..1..1.', Z: '111..1.1.1..111', '0': '1111.11.11.1111', '1': '.1.11..1..1.111', '2': '111..1111..1111',
   '3': '111..1.11..1111', '4': '1.11.1111..1..1', '5': '1111..111..1111', '6': '1111..1111.1111', '7': '111..1.1..1..1.',
-  '8': '1111.11111.1111', '9': '1111.1111..1111', '-': '......111......', '+': '....1.111.1....', ' ': '...............',
+  '8': '1111.11111.1111', '9': '1111.1111..1111', '-': '......111......', '/': '..1..1.1.1..1..', '+': '....1.111.1....', ' ': '...............',
 };
 function drawText(ctx, str, x, y, col) {
   ctx.fillStyle = col;
@@ -86,7 +96,7 @@ function baseName(c) { return GLYPHS[c.g].name; }
 
 const Combat = {
   projectiles: [], slashes: [], gems: [], numbers: [], cd: 0, toast: null, hurtT: 0,
-  inv: ['sling'], eq: 0, xp: 0, ability: 0,
+  inv: ['sling'], eq: 0, xp: 0, ability: 0, specials: ['beam'], bossDown: new Set(), talkT: -9,
   hp: 8, invT: 0, deathT: 0, lastHurt: -99, regenT: 0, auth: true, heartsT: 0, keys: 0, unlocked: new Set(),
   hitBuf: [], tameBuf: [], esBuf: [], seq: 1, snapT: 0, atkEvt: null,
 
@@ -98,10 +108,19 @@ const Combat = {
         if (!this.inv.length) this.inv = ['sling'];
         this.eq = clamp(s.eq | 0, 0, this.inv.length - 1); this.xp = Math.max(0, +s.xp || 0);
         this.keys = Math.max(0, s.keys | 0); this.unlocked = new Set(Array.isArray(s.un) ? s.un.map(String) : []);
+        if (Array.isArray(s.sp)) this.specials = ['beam'].concat(s.sp.filter((k) => SPECIALS[k] && k !== 'beam'));
+        this.ability = clamp(s.ab | 0, 0, this.specials.length - 1);
+        this.bossDown = new Set(Array.isArray(s.bd) ? s.bd.map(String) : []);
       }
     } catch (e) { /* fresh start */ }
   },
-  save() { try { localStorage.setItem('worldmap-combat', JSON.stringify({ inv: this.inv, eq: this.eq, xp: this.xp, keys: this.keys, un: [...this.unlocked].slice(-300) })); } catch (e) { /* no storage */ } },
+  save() {
+    try {
+      localStorage.setItem('worldmap-combat', JSON.stringify({ inv: this.inv, eq: this.eq, xp: this.xp, keys: this.keys, un: [...this.unlocked].slice(-300),
+        sp: this.specials, ab: this.ability, bd: [...this.bossDown] }));
+    } catch (e) { /* no storage */ }
+  },
+  special() { return this.specials[this.ability] || 'beam'; },
   item() { return ITEMS[this.inv[this.eq]] || ITEMS.sling; },
   level() { return Math.floor(Math.sqrt(this.xp / 6)) + 1; },
   levelXp(l) { return (l - 1) * (l - 1) * 6; },
@@ -133,6 +152,7 @@ const Combat = {
   },
   attack(aim) {
     if (game.mode !== 'world' || game.pending || this.cd > 0) return;
+    if (Powers.possess) { Powers.endPossess(); this.cd = 0.3; return; } // attacking bursts you out of a possessed body
     const it = this.item(), p = game.player, x0 = p.px + 4, y0 = p.py + 4;
     if (!aim) {
       const e = this.nearestEnemy(x0, y0, 90);
@@ -173,7 +193,7 @@ const Combat = {
           const dx = c.px + 4 - x0, dy = c.py + 4 - y0, d = Math.hypot(dx, dy);
           let da = Math.atan2(dy, dx) - a;
           da = Math.atan2(Math.sin(da), Math.cos(da));
-          if (d < (it.reach || 15) + 4 && Math.abs(da) < 1.25) this.damage(c, dmg, el, a);
+          if (d < (it.reach || 15) + 4 + (c.r ? c.r - 6 : 0) && Math.abs(da) < 1.25) this.damage(c, dmg, el, a);
         }
         break;
       }
@@ -202,7 +222,7 @@ const Combat = {
     if (el === 'ember') c.burn = 2.5;
     if (el === 'frost') c.slow = 3;
     const m = game.map, sx = Math.abs(Math.cos(a)) > Math.abs(Math.sin(a)) ? Math.sign(Math.cos(a)) : 0, sy = sx ? 0 : Math.sign(Math.sin(a));
-    if (!c.moving && !m.blocked(c.x + sx, c.y + sy) && !m.entr.has((c.y + sy) * m.w + c.x + sx)) {
+    if (!c.moving && !c.boss && !m.blocked(c.x + sx, c.y + sy) && !m.entr.has((c.y + sy) * m.w + c.x + sx)) {
       c.fx = c.x; c.fy = c.y; c.x += sx; c.y += sy; c.t = 0; c.moving = true; c.wait = 0.3;
     }
     for (let n = 0; n < 5; n++) spawnParticle('beamSpark', c.px + 4, c.py + 4, (Math.random() - 0.5) * 60, (Math.random() - 0.5) * 60, 0.35, ELEMENTS[el].col);
@@ -211,6 +231,7 @@ const Combat = {
   },
   // a friendly creature that gets hit: it flinches, hops aside and looks startled
   poke(c, a) {
+    if (c.npc) return;
     c.flash = 0.3; c.hitT = 0.35; c.startle = 1;
     const m = game.map, sx = Math.abs(Math.cos(a)) > Math.abs(Math.sin(a)) ? Math.sign(Math.cos(a)) : 0, sy = sx ? 0 : Math.sign(Math.sin(a));
     if (!c.moving && !m.blocked(c.x + sx, c.y + sy) && !m.entr.has((c.y + sy) * m.w + c.x + sx)) {
@@ -235,7 +256,8 @@ const Combat = {
     if (i >= 0) m.creatures.splice(i, 1);
     const x = c.px + 4, y = c.py + 4;
     for (let n = 0; n < 18; n++) spawnParticle('beamSpark', x, y, (Math.random() - 0.5) * 90, (Math.random() - 0.5) * 90, 0.5, n % 2 ? '#ffffff' : '#ff5a50');
-    const n = Math.max(1, Math.ceil(c.maxhp / 2));
+    if (c.boss) Bosses.defeated(c);
+    const n = clamp(Math.ceil(c.maxhp / 2), 1, 24);
     for (let k = 0; k < n; k++) {
       const a = Math.random() * Math.PI * 2;
       this.gems.push({ x, y, vx: Math.cos(a) * 40, vy: Math.sin(a) * 40, val: c.maxhp / n, map: m, t: 0 });
@@ -245,6 +267,7 @@ const Combat = {
   // --- the player's health ------------------------------------------------------------------
   hurt(dmg) {
     if (this.invT > 0 || this.deathT > 0 || game.pending) return;
+    if (Powers.possess) Powers.endPossess(true);
     this.hp -= dmg; this.invT = 0.9; this.hurtT = 0.35; this.lastHurt = game.time; this.showHearts(); game.player.hitT = 0.3;
     Powers.shake = Math.max(Powers.shake, 2); Sound.sfx('hurt');
     const p = game.player;
@@ -253,6 +276,7 @@ const Combat = {
   },
   die() {
     this.hp = 0; this.deathT = 1.4;
+    Powers.charging = false; Sound.chargeStop();
     const p = game.player;
     for (let n = 0; n < 40; n++) spawnParticle('beamSpark', p.px + 4, p.py + 4, (Math.random() - 0.5) * 120, (Math.random() - 0.5) * 120, 0.8, n % 2 ? '#ffffff' : '#ff5a50');
     Powers.rings.push({ x: p.px + 4, y: p.py + 4, r: 2, vr: 60, life: 0.8, max: 0.8, k: 'ember' });
@@ -264,7 +288,7 @@ const Combat = {
       game.map = game.world.map; game.stack = []; game.ret = null;
       game.player.place(game.world.start.x, game.world.start.y); game.player.face = 'down';
       Combat.hp = Combat.maxHp(); Combat.invT = 2; Combat.deathT = 0; Combat.projectiles.length = 0;
-      particles.length = 0; snapCamera();
+      particles.length = 0; snapCamera(); game.irisT = game.time;
     }, 1.6), 900);
   },
   gainXp(v) {
@@ -313,13 +337,17 @@ const Combat = {
     this.say('KEY X' + this.keys, G.key); Sound.sfx('key');
   },
   tryUnlock(e, x, y) {
-    if (this.keys > 0) {
-      this.keys--; this.unlocked.add(String(e.id)); this.save();
+    const need = e.keyCost || 1;
+    if (this.keys >= need) {
+      this.keys -= need; this.unlocked.add(String(e.id)); this.save();
       this.say('UNLOCKED', G.lockIcon); Sound.sfx('unlock');
       for (let n = 0; n < 14; n++) spawnParticle('beamSpark', x * TS + 4, y * TS + 4, (Math.random() - 0.5) * 70, (Math.random() - 0.5) * 70, 0.5, n % 2 ? '#f0c030' : '#ffffff');
       return true;
     }
-    if (!this.lockedSaid || game.time - this.lockedSaid > 1) { this.lockedSaid = game.time; this.say('LOCKED - FIND A KEY', G.lockIcon); Sound.sfx('locked'); }
+    if (!this.lockedSaid || game.time - this.lockedSaid > 1) {
+      this.lockedSaid = game.time; Sound.sfx('locked');
+      this.say(need > 1 ? 'ARENA - NEEDS ' + need + ' KEYS ' + this.keys + '/' + need : 'LOCKED - FIND A KEY', need > 1 ? G.key : G.lockIcon);
+    }
     return false;
   },
   cycle(dir) {
@@ -328,9 +356,33 @@ const Combat = {
     this.say(this.item().name, G['item_' + this.inv[this.eq]]); Sound.sfx('ui'); this.save();
   },
   cycleAbility() {
-    const list = ['BEAM'];
-    this.ability = (this.ability + 1) % list.length;
-    this.say(list[this.ability], G.icon_beam); Sound.sfx('ui');
+    if (Powers.charging) return;
+    this.ability = (this.ability + 1) % this.specials.length;
+    const S = SPECIALS[this.special()];
+    this.say(this.specials.length > 1 ? S.name : S.name + ' - TRADE FOR MORE', G[S.icon]); Sound.sfx('ui'); this.save();
+  },
+  // --- the special trader: five weapons for one special you don't know yet -------------
+  tryTalk(x, y) {
+    const c = game.map.creatures.find((q) => q.npc && q.x === x && q.y === y);
+    if (!c || game.time - this.talkT < 1.2) return !!c;
+    this.talkT = game.time; c.emote = 0; c.talk = 1.5;
+    const missing = Object.keys(SPECIALS).filter((k) => this.specials.indexOf(k) < 0);
+    if (!missing.length) { this.say('I HAVE TAUGHT YOU ALL I KNOW'); Sound.sfx('ui'); return true; }
+    if (this.inv.length < 5) { this.say(this.inv.length + '/5', G.item_rustySword); Sound.sfx('locked'); return true; }
+    const take = shuffle(this.inv.slice(), Math.random).slice(0, 5);
+    this.inv = this.inv.filter((id) => take.indexOf(id) < 0);
+    if (!this.inv.length) this.inv = ['sling'];
+    this.eq = 0;
+    const k = missing[Math.floor(Math.random() * missing.length)];
+    this.specials.push(k); this.ability = this.specials.length - 1;
+    this.say('LEARNED ' + SPECIALS[k].name, G[SPECIALS[k].icon]);
+    const p = game.player;
+    for (const id of take) {
+      for (let n = 0; n < 4; n++) spawnParticle('beamSpark', p.px + 4, p.py + 4, (c.px - p.px) * 2 + (Math.random() - 0.5) * 30, (c.py - p.py) * 2 + (Math.random() - 0.5) * 30, 0.5, ELEMENTS[ITEMS[id].el].col);
+    }
+    Powers.rings.push({ x: p.px + 4, y: p.py + 4, r: 2, vr: 80, life: 0.7, max: 0.7, k });
+    Sound.sfx('levelup'); this.save();
+    return true;
   },
   // bump into a closed chest to open it: its item pops out next to it
   tryOpen(x, y) {
@@ -371,6 +423,7 @@ const Combat = {
       if (c.dead) continue;
       if (!c.enemy) {
         c.heartCd = (c.heartCd || 0) - dt;
+        if (c.npc) { if (c.talk > 0) c.talk -= dt; continue; }
         if (!c.pet && d < 7 && this.deathT <= 0 && c.heartCd <= 0) {
           c.emote = 1.6; c.heartCd = 3; Sound.sfx('heart');
         }
@@ -394,7 +447,8 @@ const Combat = {
         }
       } else {
         c.cd -= dt;
-        if (d < 10 && c.cd <= 0 && c.hp > 0.05) { c.cd = 1; this.hurt(c.def.dmg); }
+        // a possessed body fools ordinary enemies, but not bosses
+        if (d < (c.r ? c.r + 4 : 10) && c.cd <= 0 && c.hp > 0.05 && (!Powers.possess || c.boss)) { c.cd = 1; this.hurt(c.def.dmg); }
         // ranged attackers fire at the nearest player (only where we run the enemies)
         if (this.auth && c.def.shot) {
           c.shotCd -= dt;
@@ -403,6 +457,7 @@ const Combat = {
         }
       }
     }
+    if (this.auth) Bosses.update(dt, m);
     // projectiles
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const pr = this.projectiles[i];
@@ -464,8 +519,8 @@ const Combat = {
     // hit enemies (an arcing pellet only hits as it comes down); a friend's shots are just for show
     if (pr.owner === 'ghost' || (pr.type === 'arc' && pr.t < 0.55)) return false;
     for (const c of m.creatures) {
-      if (pr.hit.has(c) || c.dead || c.pet) continue;
-      if (Math.hypot(c.px + 4 - pr.x, c.py + 4 - pr.y) > 6) continue;
+      if (pr.hit.has(c) || c.dead || c.pet || c.npc) continue;
+      if (Math.hypot(c.px + 4 - pr.x, c.py + 4 - pr.y) > (c.r || 6)) continue;
       pr.hit.add(c);
       if (!this.isEnemy(c)) {
         if (pr.owner === 'pet' || pr.owner === 'seed') continue;
@@ -487,8 +542,8 @@ const Combat = {
     return false;
   },
   // --- enemy shots ---------------------------------------------------------------------------------
-  nearestPlayer(x, y, range) {
-    const pl = [[game.player.px + 4, game.player.py + 4]];
+  nearestPlayer(x, y, range, seeThrough) {
+    const pl = Powers.possess && !seeThrough ? [] : [[game.player.px + 4, game.player.py + 4]];
     for (const f of Coop.here()) pl.push([f.px + 4, f.py + 4]);
     let best = null, bd = range * range;
     for (const q of pl) { const d = (q[0] - x) ** 2 + (q[1] - y) ** 2; if (d < bd) { bd = d; best = q; } }
@@ -598,8 +653,17 @@ const Combat = {
     }
     // creature overlays: hearts above pets, health bars on hurt enemies
     for (const c of m.creatures) {
-      const x = Math.round(c.px - ox), y = Math.round(c.py - oy) - (GLYPHS[c.g].h - TS);
-      if (x < -8 || y < -16 || x > W || y > H) continue;
+      const gd = GLYPHS[c.g], x = Math.round(c.px - ox) - ((gd.w - TS) >> 1), y = Math.round(c.py - oy) - (gd.h - TS);
+      if (x < -16 || y < -16 || x > W || y > H) continue;
+      // red eyes cast a little light of their own
+      if (c.enemy && !c.dead) L.push({ x: c.px + 4, y: c.py + 2 - (gd.h - TS), rgb: [255, 40, 30], r: c.boss ? 22 : 10, i: c.boss ? 0.8 : 0.4 });
+      // the special trader: a lantern glow and a bobbing sword sign above the hood
+      if (c.npc) {
+        L.push({ x: c.px + 6, y: c.py - 2, rgb: [255, 216, 144], r: 34, i: 0.9 });
+        const sy = y - 10 + Math.round(Math.sin(t * 3) * 1.5), g = G.item_rustySword;
+        S.drawImage(spr(g, 0, false), x, sy); E.globalAlpha = 0.7; E.drawImage(spr(g, 0, false), x, sy); E.globalAlpha = 1;
+        continue;
+      }
       if (c.startle > 0 && !(c.emote > 0)) {
         const hy = y - 9 - Math.round((1 - c.startle) * 2);
         S.drawImage(spr(G.emoteBang, 0, false), x, hy); E.drawImage(spr(G.emoteBang, 0, false), x, hy);
@@ -608,7 +672,7 @@ const Combat = {
         const hy = y - 9 - Math.round((1.6 - Math.min(1.6, c.emote)) * 3);
         S.drawImage(spr(G.heartFill, 0, false), x, hy); E.drawImage(spr(G.heartFill, 0, false), x, hy);
       }
-      if (c.enemy && c.hp < c.maxhp) {
+      if (c.enemy && !c.boss && c.hp < c.maxhp) {
         const w = 8, f = Math.max(0, c.hp / c.maxhp);
         S.globalAlpha = 1; S.fillStyle = '#300'; S.fillRect(x, y - 3, w, 1);
         S.fillStyle = '#ff4a4a'; S.fillRect(x, y - 3, Math.ceil(w * f), 1);
@@ -800,7 +864,17 @@ const Combat = {
   },
 
   // screen-space HUD: equipped item, ability, level and XP bar, and a toast line
-  hud(S, E, VW) {
+  hud(S, E, VW, VH) {
+    // boss health bar along the bottom while one is alive here
+    const boss = game.map && game.map.creatures.find((c) => c.boss && !c.dead);
+    if (boss && boss.maxhp) {
+      const w = Math.min(160, Math.round(VW * 0.6)), x = Math.round(VW / 2 - w / 2), y = Math.round(VH) - 14, f = clamp(boss.hp / boss.maxhp, 0, 1);
+      const name = boss.boss.name;
+      S.globalAlpha = 0.75; S.fillStyle = '#0b0b10'; S.fillRect(x - 3, y - 9, w + 6, 16); S.globalAlpha = 1;
+      drawText(S, name, Math.round(VW / 2 - name.length * 2), y - 7, boss.enraged ? '#ff6a5a' : '#f2f0e8');
+      S.fillStyle = '#3a1a20'; S.fillRect(x, y, w, 3);
+      S.fillStyle = boss.flash > 0 ? '#ffffff' : '#ff3a3a'; S.fillRect(x, y, Math.ceil(w * f), 3);
+    }
     // nothing permanent on screen: health appears when it changes, names when you switch or pick up
     if (this.heartsT > 0) this.heartsT -= 1 / 60;
     if (this.heartsT > 0 || this.deathT > 0) {
@@ -873,6 +947,8 @@ const LOCKABLE = { crypt: 0.6, castle: 0.5, tower: 0.5, dungeon: 0.4, temple: 0.
   worldtree: 0.5, wreck: 0.35, cave: 0.2, icecave: 0.3, hollow: 0.25, house: 0.08 };
 function lockEntrances(world, seed) {
   for (const e of world.entrances) {
+    // boss arenas are always sealed and take two keys
+    if (e.type === 'arena') { e.locked = true; e.keyCost = 2; continue; }
     const p = LOCKABLE[e.type] || 0;
     if (p && hash2(e.id, 7, seed) < p && Math.abs(e.ret.x - world.start.x) + Math.abs(e.ret.y - world.start.y) > 20) e.locked = true;
   }
@@ -913,12 +989,13 @@ Combat.load();
 // --- input --------------------------------------------------------------------------------------------
 cvs.addEventListener('pointerdown', (e) => {
   if (game.mode !== 'world') return;
+  if (CoopUI.isOpen()) { CoopUI.toggle(false); return; }
   if (e.button === 2) { Powers.startCharge(Powers.aimFromEvent(e)); return; }
   if (e.button === 0) Combat.attack(Powers.aimFromEvent(e));
 });
 cvs.addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('keydown', (e) => {
-  if (e.repeat || game.mode !== 'world' || (e.target && e.target.tagName === 'INPUT')) return;
+  if (e.repeat || game.mode !== 'world' || CoopUI.isOpen() || (e.target && e.target.tagName === 'INPUT')) return;
   if (e.code === 'KeyQ') Combat.cycle(1);
   if (e.code === 'KeyE') Combat.cycleAbility();
   if (e.code === 'KeyF' || e.code === 'KeyJ') Combat.attack(null);

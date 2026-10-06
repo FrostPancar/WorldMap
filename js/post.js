@@ -97,7 +97,7 @@ void main(){
   float grille = mix(1.0, 0.9 + 0.1 * sin(f.x * 3.14159), uScan);
   col *= scan * grille;
   float vig = smoothstep(0.95, 0.3, length(cc * vec2(1.0, 0.9)));
-  col *= mix(0.5, 1.0, vig);
+  col *= mix(0.62, 1.0, vig);
   col = col / (1.0 + col * 0.15) * 1.1;
   col += (hash12(gl_FragCoord.xy + fract(uTime * 7.31) * 311.0) - 0.5) * 0.03;
   col *= step(uFade, bayer4(floor(sp)) + 0.0001);

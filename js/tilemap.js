@@ -120,6 +120,22 @@ class TileMap {
         ctx.drawImage(spr(g, 0, gv & FLIP), px, py);
       }
     }
+    // interiors: a pale rim where walls meet open floor
+    if (this.wall) {
+      ctx.fillStyle = this.edgeColor || '#8a8cae';
+      ctx.globalAlpha = 0.7;
+      const W = this.wall, h = this.h;
+      for (let y = y0; y < y0 + CH && y < h; y++) for (let x = x0; x < xe; x++) {
+        const i = y * w + x;
+        if (!W[i]) continue;
+        const px = (x - x0) * TS, py = (y - y0) * TS;
+        if (y + 1 < h && !W[i + w]) ctx.fillRect(px, py + TS - 1, TS, 1);
+        if (y > 0 && !W[i - w]) ctx.fillRect(px, py, TS, 1);
+        if (x > 0 && !W[i - 1]) ctx.fillRect(px, py, 1, TS);
+        if (x + 1 < w && !W[i + 1]) ctx.fillRect(px + TS - 1, py, 1, TS);
+      }
+      ctx.globalAlpha = 1;
+    }
     return c;
   }
 
