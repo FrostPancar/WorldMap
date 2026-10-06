@@ -189,6 +189,8 @@ function update(dt) {
 
   const m = game.map, p = game.player;
   let dir = game.pending ? null : input.dir();
+  // rooted while charging: direction keys only turn you to aim the beam
+  if (Powers.charging) { if (dir && !p.moving) p.face = dir; dir = null; }
   if (dir && m !== game.world.map && game.time < (game.lockUntil || 0)) {
     // for the first seconds in a space its exits stay shut
     const [dx, dy] = DIRS[dir];
