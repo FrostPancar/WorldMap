@@ -31,6 +31,7 @@ const input = {
   dir() { return this.order.length ? this.order[this.order.length - 1] : null; },
 };
 addEventListener('keydown', (e) => {
+  if (e.target && e.target.tagName === 'INPUT') return;
   const d = KEYMAP[e.code];
   if (d) { if (input.order.indexOf(d) < 0) input.order.push(d); e.preventDefault(); }
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') input.run = true;
@@ -372,7 +373,8 @@ function boot() {
   snapCamera();
   window.__genMs = performance.now() - t0;
   window.game = game;
-  Coop.init();
+  CoopUI.init(seed);
+  Coop.initArtifactRoom();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(() => setTimeout(boot, 30));
