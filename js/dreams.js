@@ -543,6 +543,8 @@ function applyDream(m, ent, seed) {
   m.creatures = [];
   spawnInteriorCreatures(m, R, T.npcs, Math.min(12, 2 + Math.round(floorCount / 160)));
   for (const c of m.creatures) c.speed *= 0.6;
+  const foes = THEME_FOES[T.name];
+  if (foes && foes.length) spawnInteriorCreatures(m, R, foes, Math.min(10, 2 + Math.round(floorCount / 200)));
 
   if (T.amb) m.ambient = T.amb.slice();
   m.dream = { name: T.name, parts: T.parts, fx: T.fx, light: T.light || 1 };

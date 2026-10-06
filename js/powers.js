@@ -90,8 +90,8 @@ const Powers = {
         spawnParticle('beamSpark', x1, y1, Math.cos(pa) * sp, Math.sin(pa) * sp, 0.3 + Math.random() * 0.4, this.color(k));
       }
     }
-    // the beam hurts enemies along its length
-    for (const cr of m.creatures.slice()) {
+    // the beam hurts enemies along its length (a friend's beam is only drawn here)
+    if (owner === game.player) for (const cr of m.creatures.slice()) {
       if (!Combat.isEnemy(cr)) continue;
       const cx = cr.px + 4, cy = cr.py + 4;
       const t = clamp(((cx - x0) * ca + (cy - y0) * sa) / d, 0, 1);

@@ -207,10 +207,13 @@ function update(dt) {
   Powers.update(dt);
   Combat.update(dt);
   const lim = 44;
+  // where a co-op friend runs this map's creatures we only follow their reports
+  const auth = Combat.amAuth();
   for (const c of m.creatures) {
     if (Math.abs(c.x - p.x) > lim || Math.abs(c.y - p.y) > lim) continue;
-    updateCreature(c, m, dt, p);
+    if (auth || c.pet) updateCreature(c, m, dt, p);
   }
+  if (!auth) Combat.netUpdate(dt);
   // camera
   const [tx, ty] = cameraTarget();
   const k = 1 - Math.exp(-dt * 9);
@@ -360,6 +363,15 @@ function renderWorld(S, L, E, P) {
     if (fx < -8 || fy < -8 || fx > v.SW || fy > v.SH) continue;
     S.drawImage(spr(fg, ff, fflip), fx, fy);
     E.globalAlpha = 0.22; E.drawImage(spr(fg, ff, fflip), fx, fy); E.globalAlpha = 1;
+    if (f.mh && f.hp < f.mh) {
+      S.fillStyle = '#300'; S.fillRect(fx, fy - 3, 8, 1);
+      S.fillStyle = '#ff4a5a'; S.fillRect(fx, fy - 3, Math.ceil(8 * Math.max(0, f.hp) / f.mh), 1);
+    }
+    // a friend's pets
+    for (const q of f.pets || []) {
+      const d = GLYPHS[q[0]], qx = Math.round(q[1] - ox), qy = Math.round(q[2] - oy) - (d.h - TS);
+      S.drawImage(spr(q[0], Math.floor(t * 3) % 2, !!q[3]), qx, qy);
+    }
   }
   // player
   const pf0 = p.sprite()[1];
@@ -429,6 +441,9 @@ function boot() {
   MapView.init(game.world);
   seedOverworldOrbs(game.world, seed);
   seedOverworldItems(game.world, seed);
+  seedUrbanEnemies(game.world, seed);
+  Combat.number(game.world.map);
+  Combat.hp = Combat.maxHp();
   game.player.place(game.world.start.x, game.world.start.y);
   MapView.reveal(game.player.x, game.player.y, 13);
   snapCamera();

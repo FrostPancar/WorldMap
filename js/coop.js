@@ -51,6 +51,7 @@ const Coop = {
       e.bms = s.bm.s;
       if (e.where === this.where()) Powers.remoteBeam(e, s.bm);
     }
+    Combat.netReceive(id, s, e);
     CoopUI.refresh();
   },
   drop(id) { if (this.peers.delete(id)) CoopUI.refresh(); },
@@ -126,9 +127,14 @@ const Coop = {
       if (lb && performance.now() - lb.t < 900) st.bm = { s: lb.s, a: lb.a, c: lb.c };
       const key = `${st.px},${st.py},${st.f},${st.m},${st.w},${st.ch},${st.co},${st.pk},${st.cg},${st.bm ? st.bm.s : 0}`;
       const now = performance.now();
-      // send on change (capped ~30/s), plus a keepalive every 2s
-      if ((key !== this.last && now - this.lastSent > 66) || now - this.lastSent > 2000) {
-        this.last = key; this.lastSent = now; this.lastState = st; this.sendFn(st);
+      // send on change or when there is combat news (capped ~15/s), plus a keepalive every 2s
+      if (now - this.lastSent > 66) {
+        const net = Combat.netPayload(now);
+        const k2 = key + ',' + net.out.hp + ',' + JSON.stringify(net.out.pt);
+        if (net.force || k2 !== this.last || now - this.lastSent > 2000) {
+          Object.assign(st, net.out);
+          this.last = k2; this.lastSent = now; this.lastState = st; this.sendFn(st);
+        }
       }
     }
     const k = 1 - Math.exp(-dt * 14), now = performance.now();
