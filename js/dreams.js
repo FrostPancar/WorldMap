@@ -467,7 +467,7 @@ const LAIR_THEMES = [
   [{ name: 'frost', floor: ['#16263a', '#1e3450', '#8ccaf0'], pat: 'mosaic', wallBg: '#08101a', wall: ['brickIce'], paint: [], centre: ['crystalBigCyanLit'],
     props: [['crystalIce', 0.8, 1], ['iceBlock', 0.6, 1], ['snowflake', 1.2, 0], ['lanternBlue', 0.2, 1]], npcs: [], foes: ['c_ghost', 'c_ghost', 'c_bat'],
     parts: ['snow', 'shard'], amb: [0.42, 0.48, 0.6], fx: { mono: 0.25 } },
-   { name: 'frost2', floor: ['#e4eef6', '#c8d8e8', '#8ccaf0'], pat: 'checker', light: 0.5, wallBg: '#5a94c0', wall: ['brickIce'], paint: [], centre: ['crystalBigLit'],
+   { name: 'frost2', floor: ['#9ab4cc', '#7e9ab6', '#5a86b0'], pat: 'checker', light: 0.5, wallBg: '#5a94c0', wall: ['brickIce'], paint: [], centre: ['crystalBigLit'],
     props: [['crystalIce', 0.8, 1], ['pineIce', 0.6, 1], ['snowflake', 1.4, 0], ['grave', 0.3, 1]], npcs: [], foes: ['c_ghost', 'c_ghost', 'c_shadow'],
     parts: ['snow', 'star'], amb: [0.58, 0.6, 0.66], fx: { warp: 0.4 } }],
   [{ name: 'ember', floor: ['#2a1410', '#3a1a10', '#5a2a14'], pat: 'bands', wallBg: '#140806', wall: ['brickRed'], paint: [], centre: ['fireShrine'],

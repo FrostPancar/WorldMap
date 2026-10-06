@@ -262,7 +262,7 @@ function genCave(seed, ice, kind, depth) {
   const floor = caFloor(W, H, R, 0.45, 5);
   const m = new TileMap(W, H, {
     kind: 'interior', voidColor: '#000000',
-    bgPal: ice ? ['#0a1220', '#03050a', '#0e2440', '#16263a'] : mine ? ['#110d0a', '#040302', '#0a1630', '#221a14'] : ['#0b0d16', '#030305', '#0a1630', '#191b2c'],
+    bgPal: ice ? ['#0a1220', '#03050a', '#1e4a7a', '#16263a'] : mine ? ['#110d0a', '#040302', '#1a3c6c', '#221a14'] : ['#0b0d16', '#030305', '#1a3c6c', '#191b2c'],
     ambient: ice ? [0.3, 0.36, 0.5] : mine ? [0.26, 0.22, 0.2] : [0.22, 0.22, 0.32],
   });
   const crystal = ice ? 'crystalIce' : (R() < 0.5 ? 'crystal' : 'crystalPurple');
@@ -290,7 +290,7 @@ function genCave(seed, ice, kind, depth) {
     if (!floor[i] || Math.abs(x - exX) + Math.abs(y - exY) < 6) continue;
     if (fbm(x * 0.09, y * 0.09, seed + 2, 3) > (mine ? 0.7 : 0.64)) {
       m.water[i] = 1; m.solid[i] = 1; m.bg[i] = 2;
-      if (R() < 0.5) m.glyph[i] = G[ice ? 'waveIce' : 'waveCave'];
+      if (R() < 0.6) m.glyph[i] = G[ice ? 'waveCaveIce' : 'waveCave'];
     }
   }
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {

@@ -135,8 +135,7 @@ function exitInterior(how) {
   fadeTo(() => {
     let back;
     if (how && how.warp) { back = { map: game.world.map, x: how.warp.x, y: how.warp.y, ent: null }; game.stack = []; MapView.reveal(how.warp.x, how.warp.y, 13); }
-    else if (how && how.surface) { back = game.stack[0]; game.stack = []; }
-    else back = game.stack.pop();
+    else { back = game.stack[0]; game.stack = []; } // any way back up leads straight out, to the dungeon's entrance
     back = back || { map: game.world.map, x: game.world.start.x, y: game.world.start.y, ent: null };
     Combat.carryPets(game.map, back.map, back.x, back.y);
     game.map = back.map; game.ret = back.ent;
@@ -357,6 +356,15 @@ function drawIris(S, VW, VH) {
   S.restore();
 }
 
+// average brightness (0..1) of the walkable floor colours in an interior, cached
+function floorLum(m) {
+  if (m.floorLum !== undefined) return m.floorLum;
+  const lums = m.bgPal.map((c) => { const [r, g, b] = hexToRgb(c); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; });
+  let sum = 0, n = 0;
+  for (let i = 0; i < m.w * m.h; i += 3) if (!m.solid[i] && lums[m.bg[i]] !== undefined) { sum += lums[m.bg[i]]; n++; }
+  return (m.floorLum = n ? sum / n : 0);
+}
+
 function renderWorld(S, L, E, P) {
   const v = game.view, m = game.map, p = game.player, t = game.time;
   const over = m === game.world.map;
@@ -460,7 +468,17 @@ function renderWorld(S, L, E, P) {
     lightK = m.dream ? m.dream.light : 1;
   }
   // in rooms that are already bright, lamps add far less so pale floors don't blow out
-  const ambAvg = (amb[0] + amb[1] + amb[2]) / 3, glowK = over ? 1 : clamp(1.35 - ambAvg * 1.35, 0.3, 1);
+  // Pale rooms already reflect plenty of light: lamps, glow, bloom and haze all
+  // stacked on a bright floor blow out to white. So indoors everything that
+  // adds light backs off as the room's ambient and its floor get brighter.
+  let glowK = 1;
+  if (!over) {
+    const ambAvg = (amb[0] + amb[1] + amb[2]) / 3, lum = floorLum(m), brightK = clamp(1.5 - lum * 1.9, 0.25, 1);
+    glowK = clamp(1.35 - ambAvg * 1.35, 0.3, 1) * brightK;
+    if (lum > 0.4) amb = amb.map((a) => a * lerp(1, 0.75, clamp((lum - 0.4) / 0.4, 0, 1)));
+    P.bloom *= brightK; P.haze *= brightK; P.threshold = Math.min(0.95, P.threshold + (1 - brightK) * 0.4);
+    P.amb = amb;
+  }
   lightK *= glowK;
   P.amb = amb;
   L.globalCompositeOperation = 'source-over';
