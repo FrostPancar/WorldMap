@@ -2,10 +2,8 @@
 // ---------------------------------------------------------------------------
 // Co-op: everyone in a room shares the same seeded world, so only player
 // positions travel. Two transports feed the same peer table:
-//   - WebRTC via PeerJS (any static host, e.g. Netlify): the first player in
-//     a room claims the room's host id, everyone else connects to it, and the
-//     host relays states between players. If the host leaves, the next player
-//     to reconnect takes over.
+//   - Public MQTT-over-WebSocket brokers (works from any static host, e.g.
+//     Netlify): everyone in a room publishes and subscribes on one topic.
 //   - The claude.ai artifact `room` presence channel, when the page runs there.
 // Without either the game is simply solo.
 // ---------------------------------------------------------------------------
