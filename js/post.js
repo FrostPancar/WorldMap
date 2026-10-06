@@ -29,7 +29,9 @@ void main(){
   vec3 e = texture2D(uE, v).rgb;
   vec2 p = floor(v * uRes); p.y = uRes.y - 1.0 - p.y; p += uCam;
   float b = bayer4(p);
-  vec3 add = max(L - uAmb, 0.0);
+  // soft-compress stacked light so clusters of lamps don't blow out
+  vec3 addRaw = max(L - uAmb, 0.0);
+  vec3 add = addRaw * 1.25 / (1.0 + addRaw * 0.9);
   vec3 addQ = floor(add * uLevels + b) / uLevels;
   vec3 Lf = min(L, uAmb) + addQ;
   vec3 col = s * Lf;

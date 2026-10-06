@@ -225,6 +225,10 @@ const Sound = {
       case 'die': this.tone(t, 'sawtooth', 300, 40, 0.18, 0.005, 1.1, 0.6); this.noiseHit(t, 'lowpass', 2000, 100, 0.15, 1, 0.8, 0.6); break;
       case 'flash': this.noiseHit(t, 'highpass', 5000, 3000, 0.08, 0.08, 0.7, 0.3); this.tone(t, 'sine', 2400, 1800, 0.04, 0.002, 0.1); break;
       case 'eshot': this.tone(t, 'square', 600, 300, 0.04, 0.002, 0.12, 0.2); break;
+      case 'poke': this.tone(t, 'sine', 900, 1300, 0.05, 0.002, 0.1, 0.3); break;
+      case 'key': this.tone(t, 'triangle', 1320, 0, 0.07, 0.002, 0.2, 0.6); this.tone(t + 0.07, 'triangle', 1760, 0, 0.06, 0.002, 0.3, 0.6); break;
+      case 'unlock': this.noiseHit(t, 'bandpass', 2500, 1200, 0.1, 0.08, 3); this.tone(t + 0.1, 'triangle', 660, 0, 0.08, 0.003, 0.4, 0.6); this.tone(t + 0.2, 'triangle', 990, 0, 0.08, 0.003, 0.5, 0.6); break;
+      case 'locked': this.noiseHit(t, 'bandpass', 1800, 900, 0.08, 0.06, 4); this.noiseHit(t + 0.09, 'bandpass', 1600, 800, 0.07, 0.06, 4); break;
       case 'hurt': this.tone(t, 'sawtooth', 180, 70, 0.1, 0.003, 0.2, 0.2); break;
       case 'hit':
         this.tone(t, 'square', 900, 300, 0.05, 0.002, 0.12, 0.3); break;

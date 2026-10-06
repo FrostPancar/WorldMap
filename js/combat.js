@@ -58,6 +58,8 @@ for (const id in ITEMS) {
 }
 defGlyph('pedestal', ['........', '........', '.111111.', '..1111..', '..1221..', '..1221..', '.111111.', '11111111'], [P.stone, P.stoneD]);
 defGlyph('chestOpen', ['11111111', '1......1', '........', '22222222', '11133111', '11111111', '11111111', '........'], [P.gold, P.goldD, P.white]);
+defGlyph('emoteBang', ['...11...', '...11...', '...11...', '...11...', '...11...', '........', '...11...', '........'], ['#ffe84a'], { emit: true });
+defGlyph('lockIcon', ['..111...', '.1...1..', '.1...1..', '1111111.', '1112111.', '1112111.', '1111111.', '........'], [P.gold, '#3a2408'], { emit: [1] });
 defGlyph('icon_beam', ['........', '1.......', '.1......', '..111111', '.1......', '1.......', '........', '........'], ['#9ad8ff'], { emit: true });
 
 // --- tiny pixel font for the HUD ---------------------------------------------------------
@@ -85,7 +87,7 @@ function baseName(c) { return GLYPHS[c.g].name; }
 const Combat = {
   projectiles: [], slashes: [], gems: [], numbers: [], cd: 0, toast: null, hurtT: 0,
   inv: ['sling'], eq: 0, xp: 0, ability: 0,
-  hp: 8, invT: 0, deathT: 0, lastHurt: -99, regenT: 0, auth: true,
+  hp: 8, invT: 0, deathT: 0, lastHurt: -99, regenT: 0, auth: true, heartsT: 0, keys: 0, unlocked: new Set(),
   hitBuf: [], tameBuf: [], esBuf: [], seq: 1, snapT: 0, atkEvt: null,
 
   load() {
@@ -95,15 +97,17 @@ const Combat = {
         this.inv = s.inv.filter((id) => ITEMS[id]);
         if (!this.inv.length) this.inv = ['sling'];
         this.eq = clamp(s.eq | 0, 0, this.inv.length - 1); this.xp = Math.max(0, +s.xp || 0);
+        this.keys = Math.max(0, s.keys | 0); this.unlocked = new Set(Array.isArray(s.un) ? s.un.map(String) : []);
       }
     } catch (e) { /* fresh start */ }
   },
-  save() { try { localStorage.setItem('worldmap-combat', JSON.stringify({ inv: this.inv, eq: this.eq, xp: this.xp })); } catch (e) { /* no storage */ } },
+  save() { try { localStorage.setItem('worldmap-combat', JSON.stringify({ inv: this.inv, eq: this.eq, xp: this.xp, keys: this.keys, un: [...this.unlocked].slice(-300) })); } catch (e) { /* no storage */ } },
   item() { return ITEMS[this.inv[this.eq]] || ITEMS.sling; },
   level() { return Math.floor(Math.sqrt(this.xp / 6)) + 1; },
   levelXp(l) { return (l - 1) * (l - 1) * 6; },
   power() { return 1 + (this.level() - 1) * 0.12; },
-  say(text) { this.toast = { text, life: 2.2 }; },
+  say(text, icon) { this.toast = { text, icon, life: 2.2 }; },
+  showHearts() { this.heartsT = 2.6; },
 
   maxHp() { return 8 + (this.level() - 1) * 2; },
   ensure(c) {
@@ -183,7 +187,7 @@ const Combat = {
   // --- damage, death, XP ---------------------------------------------------------------------
   damage(c, dmg, el, a, remote) {
     if (!this.isEnemy(c)) return;
-    c.flash = 0.35;
+    c.flash = 0.35; c.hitT = 0.3;
     if (!this.auth) {
       // another player runs the enemies here: predict the hit, send it to them
       c.hp = Math.max(0.01, c.hp - dmg);
@@ -204,6 +208,16 @@ const Combat = {
     for (let n = 0; n < 5; n++) spawnParticle('beamSpark', c.px + 4, c.py + 4, (Math.random() - 0.5) * 60, (Math.random() - 0.5) * 60, 0.35, ELEMENTS[el].col);
     Sound.sfx('hit');
     if (c.hp <= 0) this.kill(c);
+  },
+  // a friendly creature that gets hit: it flinches, hops aside and looks startled
+  poke(c, a) {
+    c.flash = 0.3; c.hitT = 0.35; c.startle = 1;
+    const m = game.map, sx = Math.abs(Math.cos(a)) > Math.abs(Math.sin(a)) ? Math.sign(Math.cos(a)) : 0, sy = sx ? 0 : Math.sign(Math.sin(a));
+    if (!c.moving && !m.blocked(c.x + sx, c.y + sy) && !m.entr.has((c.y + sy) * m.w + c.x + sx)) {
+      c.fx = c.x; c.fy = c.y; c.x += sx; c.y += sy; c.t = 0; c.moving = true; c.wait = 0.6;
+    }
+    for (let n = 0; n < 4; n++) spawnParticle('beamSpark', c.px + 4, c.py + 4, (Math.random() - 0.5) * 40, -Math.random() * 40, 0.3, '#ffffff');
+    Sound.sfx('poke');
   },
   kill(c, net) {
     if (c.dead) return;
@@ -231,7 +245,7 @@ const Combat = {
   // --- the player's health ------------------------------------------------------------------
   hurt(dmg) {
     if (this.invT > 0 || this.deathT > 0 || game.pending) return;
-    this.hp -= dmg; this.invT = 0.9; this.hurtT = 0.35; this.lastHurt = game.time;
+    this.hp -= dmg; this.invT = 0.9; this.hurtT = 0.35; this.lastHurt = game.time; this.showHearts(); game.player.hitT = 0.3;
     Powers.shake = Math.max(Powers.shake, 2); Sound.sfx('hurt');
     const p = game.player;
     for (let n = 0; n < 8; n++) spawnParticle('beamSpark', p.px + 4, p.py + 4, (Math.random() - 0.5) * 60, (Math.random() - 0.5) * 60, 0.35, '#ff4a4a');
@@ -271,21 +285,52 @@ const Combat = {
     let k = this.inv.indexOf(id);
     if (k < 0) { this.inv.push(id); k = this.inv.length - 1; }
     this.eq = k;
-    this.say(ITEMS[id].name);
+    this.say(ITEMS[id].name, G['item_' + id]);
     const p = game.player;
     Powers.rings.push({ x: p.px + 4, y: p.py + 4, r: 2, vr: 70, life: 0.5, max: 0.5, k: ITEMS[id].el });
     Sound.sfx('absorb', 523);
     this.save();
   },
+  // --- keys and locked doors ------------------------------------------------------------------------
+  clearCell(m, x, y) {
+    const i = y * m.w + x, ck = m.chunks[((y / CH) | 0) * m.cw + ((x / CH) | 0)];
+    m.glyph[i] = 0;
+    ck.emit = ck.emit.filter((k) => k !== i); ck.anim = ck.anim.filter((k) => k !== i);
+    ck.lights = ck.lights.filter((L) => Math.floor(L.x / TS) !== x || Math.floor(L.y / TS) !== y);
+    m.cache.delete(((y / CH) | 0) * m.cw + ((x / CH) | 0));
+    if (y + 1 < m.h) m.cache.delete((((y + 1) / CH) | 0) * m.cw + ((x / CH) | 0));
+  },
+  placeLive(m, x, y, name) {
+    const i = y * m.w + x, d = GLYPHS[G[name]], ck = m.chunks[((y / CH) | 0) * m.cw + ((x / CH) | 0)];
+    m.glyph[i] = G[name];
+    if (d.emit) ck.emit.push(i);
+    if (d.light) ck.lights.push({ x: x * TS + d.light.ox, y: y * TS + d.light.oy, rgb: d.light.rgb, r: d.light.r, i: d.light.i, f: d.light.f, ph: hash2(x, y, 9) * 100 });
+    m.cache.delete(((y / CH) | 0) * m.cw + ((x / CH) | 0));
+  },
+  isLocked(e) { return !!(e && e.locked && !this.unlocked.has(String(e.id))); },
+  addKey(n) {
+    this.keys += n; this.save();
+    this.say('KEY X' + this.keys, G.key); Sound.sfx('key');
+  },
+  tryUnlock(e, x, y) {
+    if (this.keys > 0) {
+      this.keys--; this.unlocked.add(String(e.id)); this.save();
+      this.say('UNLOCKED', G.lockIcon); Sound.sfx('unlock');
+      for (let n = 0; n < 14; n++) spawnParticle('beamSpark', x * TS + 4, y * TS + 4, (Math.random() - 0.5) * 70, (Math.random() - 0.5) * 70, 0.5, n % 2 ? '#f0c030' : '#ffffff');
+      return true;
+    }
+    if (!this.lockedSaid || game.time - this.lockedSaid > 1) { this.lockedSaid = game.time; this.say('LOCKED - FIND A KEY', G.lockIcon); Sound.sfx('locked'); }
+    return false;
+  },
   cycle(dir) {
-    if (this.inv.length < 2) { this.say(this.item().name); return; }
+    if (this.inv.length < 2) { this.say(this.item().name, G['item_' + this.inv[this.eq]]); return; }
     this.eq = (this.eq + dir + this.inv.length) % this.inv.length;
-    this.say(this.item().name); Sound.sfx('ui'); this.save();
+    this.say(this.item().name, G['item_' + this.inv[this.eq]]); Sound.sfx('ui'); this.save();
   },
   cycleAbility() {
     const list = ['BEAM'];
     this.ability = (this.ability + 1) % list.length;
-    this.say(list[this.ability]); Sound.sfx('ui');
+    this.say(list[this.ability], G.icon_beam); Sound.sfx('ui');
   },
   // bump into a closed chest to open it: its item pops out next to it
   tryOpen(x, y) {
@@ -298,6 +343,7 @@ const Combat = {
     m.items.push({ x: p.x, y: p.y, id, pop: 0.5 });
     for (let n = 0; n < 16; n++) spawnParticle('beamSpark', x * TS + 4, y * TS + 4, (Math.random() - 0.5) * 70, -Math.random() * 70, 0.6, n % 2 ? P.gold : '#ffffff');
     Sound.sfx('chest');
+    if (hash2(x, y, 123) < 0.4) setTimeout(() => this.addKey(1), 700);
   },
 
   // --- per frame ------------------------------------------------------------------------------
@@ -306,23 +352,30 @@ const Combat = {
     this.cd = Math.max(0, this.cd - dt);
     this.hurtT = Math.max(0, this.hurtT - dt);
     this.invT = Math.max(0, this.invT - dt);
+    if (p.hitT > 0) p.hitT -= dt;
     this.auth = this.amAuth();
     if (this.hp < this.maxHp() && this.deathT <= 0 && game.time - this.lastHurt > 6) {
       this.regenT -= dt;
-      if (this.regenT <= 0) { this.regenT = 3.5; this.hp = Math.min(this.maxHp(), this.hp + 1); }
+      if (this.regenT <= 0) { this.regenT = 3.5; this.hp = Math.min(this.maxHp(), this.hp + 1); this.showHearts(); }
     }
     if (this.toast && (this.toast.life -= dt) <= 0) this.toast = null;
     // creatures: befriending, pets, enemies
     for (const c of m.creatures.slice()) {
       this.ensure(c);
+      if (c.hitT > 0) c.hitT -= dt;
+      if (c.startle > 0) c.startle -= dt;
       const cx = c.px + 4, cy = c.py + 4, d = Math.hypot(cx - px, cy - py);
       if (c.emote > 0) c.emote -= dt;
       if (c.burn > 0 && this.auth) { c.burn -= dt; c.burnT = (c.burnT || 0) - dt; if (c.burnT <= 0) { c.burnT = 0.6; this.damage(c, 0.5, 'ember', 0); } }
       if (c.slow > 0) c.slow -= dt;
       if (c.dead) continue;
       if (!c.enemy) {
-        if (!c.pet && d < 7 && this.deathT <= 0) {
-          c.pet = true; c.emote = 1.6; c.biome = -1; Sound.sfx('heart');
+        c.heartCd = (c.heartCd || 0) - dt;
+        if (!c.pet && d < 7 && this.deathT <= 0 && c.heartCd <= 0) {
+          c.emote = 1.6; c.heartCd = 3; Sound.sfx('heart');
+        }
+        if (!c.pet && d < 7 && this.deathT <= 0 && !m.creatures.some((q) => q.pet && !q.dead)) {
+          c.pet = true; c.emote = 1.6; c.biome = -1;
           if (c.id !== undefined) { if (this.auth) { m.tamedIds = m.tamedIds || []; m.tamedIds.push(c.id); } else this.tameBuf.push(c.id); }
         }
         if (c.pet) {
@@ -365,7 +418,7 @@ const Combat = {
       const dx = px - g.x, dy = py - g.y, d = Math.hypot(dx, dy);
       if (g.t > 0.35 && d < 70) { const s = 220 / Math.max(d, 8); g.vx += dx * s * dt; g.vy += dy * s * dt; }
       g.vx *= 0.9; g.vy *= 0.9; g.x += g.vx * dt; g.y += g.vy * dt;
-      if (d < 5 && g.t > 0.3) { this.gems.splice(i, 1); if (g.heal) { this.hp = Math.min(this.maxHp(), this.hp + g.heal); Sound.sfx('heart'); } else this.gainXp(g.val); }
+      if (d < 5 && g.t > 0.3) { this.gems.splice(i, 1); if (g.heal) { this.hp = Math.min(this.maxHp(), this.hp + g.heal); this.showHearts(); Sound.sfx('heart'); } else this.gainXp(g.val); }
     }
     // items on the ground / pedestals
     if (m.items && !game.pending) {
@@ -411,9 +464,16 @@ const Combat = {
     // hit enemies (an arcing pellet only hits as it comes down); a friend's shots are just for show
     if (pr.owner === 'ghost' || (pr.type === 'arc' && pr.t < 0.55)) return false;
     for (const c of m.creatures) {
-      if (!this.isEnemy(c) || pr.hit.has(c)) continue;
+      if (pr.hit.has(c) || c.dead || c.pet) continue;
       if (Math.hypot(c.px + 4 - pr.x, c.py + 4 - pr.y) > 6) continue;
       pr.hit.add(c);
+      if (!this.isEnemy(c)) {
+        if (pr.owner === 'pet' || pr.owner === 'seed') continue;
+        this.poke(c, Math.atan2(pr.vy || (pr.y1 - pr.y0), pr.vx || (pr.x1 - pr.x0)));
+        if (pr.type === 'arc') { this.splash(pr); return true; }
+        if (!pr.pierce) return true;
+        continue;
+      }
       this.damage(c, pr.dmg, pr.el, Math.atan2(pr.vy || (pr.y1 - pr.y0), pr.vx || (pr.x1 - pr.x0)));
       if (pr.type === 'arc') { this.splash(pr); return true; }
       if (pr.bounce > 0) {
@@ -496,7 +556,7 @@ const Combat = {
   // --- carrying pets between places -----------------------------------------------------------------
   carryPets(from, to, x, y) {
     if (from === to) return;
-    const pets = from.creatures.filter((c) => c.pet && !c.dead).slice(0, 6);
+    const pets = from.creatures.filter((c) => c.pet && !c.dead).slice(0, 1);
     for (const c of pets) {
       from.creatures.splice(from.creatures.indexOf(c), 1);
       let tx = x, ty = y;
@@ -528,10 +588,22 @@ const Combat = {
       S.drawImage(spr(g, 0, false), x, y); E.drawImage(spr(g, 0, false), x, y);
       L.push({ x: it.x * TS + 4, y: it.y * TS, rgb: ELEMENTS[ITEMS[it.id].el].rgb, r: 22, i: 0.8 + Math.sin(t * 4) * 0.2 });
     }
+    // padlocks on doors that need a key
+    for (const [i, e] of m.entr) {
+      if (!this.isLocked(e)) continue;
+      const x = (i % m.w) * TS - ox, y = ((i / m.w) | 0) * TS - oy;
+      if (x < -8 || y < -8 || x > W || y > H) continue;
+      const bobY = Math.round(y + Math.sin(t * 3) * 0.6);
+      S.drawImage(spr(G.lockIcon, 0, false), Math.round(x), bobY); E.drawImage(spr(G.lockIcon, 0, false), Math.round(x), bobY);
+    }
     // creature overlays: hearts above pets, health bars on hurt enemies
     for (const c of m.creatures) {
       const x = Math.round(c.px - ox), y = Math.round(c.py - oy) - (GLYPHS[c.g].h - TS);
       if (x < -8 || y < -16 || x > W || y > H) continue;
+      if (c.startle > 0 && !(c.emote > 0)) {
+        const hy = y - 9 - Math.round((1 - c.startle) * 2);
+        S.drawImage(spr(G.emoteBang, 0, false), x, hy); E.drawImage(spr(G.emoteBang, 0, false), x, hy);
+      }
       if (c.emote > 0) {
         const hy = y - 9 - Math.round((1.6 - Math.min(1.6, c.emote)) * 3);
         S.drawImage(spr(G.heartFill, 0, false), x, hy); E.drawImage(spr(G.heartFill, 0, false), x, hy);
@@ -729,44 +801,36 @@ const Combat = {
 
   // screen-space HUD: equipped item, ability, level and XP bar, and a toast line
   hud(S, E, VW) {
-    const x0 = Math.round(VW / 2) - 34, y0 = 4;
-    S.globalAlpha = 0.75; S.fillStyle = '#0b0b10'; S.fillRect(x0, y0, 68, 15); S.globalAlpha = 1;
-    const box = (x, g, col) => {
-      for (const c of [S, E]) { c.fillStyle = c === S ? col : '#222230'; c.fillRect(x, y0 + 1, 12, 1); c.fillRect(x, y0 + 12, 12, 1); c.fillRect(x, y0 + 1, 1, 12); c.fillRect(x + 11, y0 + 1, 1, 12); }
-      S.drawImage(spr(g, 0, false), x + 2, y0 + 3); E.drawImage(spr(g, 0, false), x + 2, y0 + 3);
-    };
-    // health: one heart per 2 HP
-    const mh = this.maxHp(), hearts = Math.ceil(mh / 2);
-    const hx0 = Math.round(VW / 2) - hearts * 3;
-    for (let k = 0; k < hearts; k++) {
-      const v = clamp(this.hp - k * 2, 0, 2), x = hx0 + k * 6, y = y0 + 17;
+    // nothing permanent on screen: health appears when it changes, names when you switch or pick up
+    if (this.heartsT > 0) this.heartsT -= 1 / 60;
+    if (this.heartsT > 0 || this.deathT > 0) {
+      const a = Math.min(1, Math.max(this.heartsT, this.deathT > 0 ? 1 : 0) * 1.5);
+      const mh = this.maxHp(), hearts = Math.ceil(mh / 2), hx0 = Math.round(VW / 2) - hearts * 3, y = 6;
+      S.globalAlpha = a * 0.6; S.fillStyle = '#0b0b10'; S.fillRect(hx0 - 3, y - 2, hearts * 6 + 5, 9); S.globalAlpha = a;
       const shape = ['11.11', '11111', '11111', '.111.', '..1..'];
-      for (let j = 0; j < 5; j++) for (let i = 0; i < 5; i++) {
-        if (shape[j][i] !== '1') continue;
-        const full = v >= 2 || (v >= 1 && i < 3);
-        S.fillStyle = full ? (this.invT > 0 && Math.floor(game.time * 20) % 2 ? '#ffffff' : '#ff4a5a') : '#3a1a20';
-        S.fillRect(x + i, y + j, 1, 1);
+      for (let k = 0; k < hearts; k++) {
+        const v = clamp(this.hp - k * 2, 0, 2), x = hx0 + k * 6;
+        for (let j = 0; j < 5; j++) for (let i = 0; i < 5; i++) {
+          if (shape[j][i] !== '1') continue;
+          const full = v >= 2 || (v >= 1 && i < 3);
+          S.fillStyle = full ? (this.invT > 0 && Math.floor(game.time * 20) % 2 ? '#ffffff' : '#ff4a5a') : '#3a1a20';
+          S.fillRect(x + i, y + j, 1, 1);
+        }
       }
+      S.globalAlpha = 1;
     }
-    const it = this.item();
-    box(x0 + 2, G['item_' + this.inv[this.eq]], ELEMENTS[it.el].col);
-    box(x0 + 16, G.icon_beam, '#9ad8ff');
-    const lv = this.level(), lo = this.levelXp(lv), hi = this.levelXp(lv + 1);
-    drawText(S, 'LV' + lv, x0 + 31, y0 + 2, '#f2f0e8'); drawText(E, 'LV' + lv, x0 + 31, y0 + 2, '#5a5a56');
-    const f = clamp((this.xp - lo) / (hi - lo), 0, 1);
-    S.fillStyle = '#1e2a1a'; S.fillRect(x0 + 31, y0 + 10, 34, 2);
-    for (const c of [S, E]) { c.fillStyle = '#6ae84a'; c.fillRect(x0 + 31, y0 + 10, Math.round(34 * f), 2); }
-    if (this.inv.length > 1) { drawText(S, String(this.eq + 1), x0 + 58, y0 + 2, '#8a8a96'); }
     if (this.toast) {
-      const s = this.toast.text, w = s.length * 4, x = Math.round(VW / 2 - w / 2), y = y0 + 26;
-      S.globalAlpha = Math.min(1, this.toast.life * 2); E.globalAlpha = S.globalAlpha * 0.6;
-      S.fillStyle = '#0b0b10'; S.fillRect(x - 3, y - 2, w + 5, 9);
-      drawText(S, s, x, y, '#f2f0e8'); drawText(E, s, x, y, '#f2f0e8');
-      S.globalAlpha = 1; E.globalAlpha = 1;
+      const s = this.toast.text, icon = this.toast.icon, w = s.length * 4 + (icon ? 11 : 0);
+      const x = Math.round(VW / 2 - w / 2), y = 20;
+      S.globalAlpha = Math.min(1, this.toast.life * 2);
+      S.fillStyle = '#0b0b10'; S.fillRect(x - 4, y - 3, w + 7, icon ? 14 : 11);
+      if (icon) S.drawImage(spr(icon, 0, false), x, y);
+      drawText(S, s, x + (icon ? 11 : 0), y + (icon ? 2 : 0), '#f2f0e8');
+      S.globalAlpha = 1;
     }
     if (this.hurtT > 0) {
-      E.globalAlpha = this.hurtT; E.fillStyle = '#801010';
-      E.fillRect(0, 0, VW + 2, 2); E.fillRect(0, 0, 2, 999); E.fillRect(VW - 1, 0, 3, 999); E.globalAlpha = 1;
+      S.globalAlpha = this.hurtT; S.fillStyle = '#c01818';
+      S.fillRect(0, 0, VW + 2, 2); S.fillRect(0, 0, 2, 999); S.fillRect(VW - 2, 0, 3, 999); S.globalAlpha = 1;
     }
   },
 };
@@ -800,6 +864,28 @@ function seedInteriorItems(m, ent, seed) {
       const i = cand[Math.floor(R() * cand.length)];
       m.glyph[i] = G.pedestal;
       m.items.push({ x: i % m.w, y: (i / m.w) | 0, id: pickItem(tags, R()) });
+    }
+  }
+}
+// Some doors are locked. Keys lie around camps, villages and ruins outdoors,
+// inside caves and dungeons, and in chests.
+const LOCKABLE = { crypt: 0.6, castle: 0.5, tower: 0.5, dungeon: 0.4, temple: 0.5, firetemple: 0.5, witch: 0.5, lighthouse: 0.4, mine: 0.35,
+  worldtree: 0.5, wreck: 0.35, cave: 0.2, icecave: 0.3, hollow: 0.25, house: 0.08 };
+function lockEntrances(world, seed) {
+  for (const e of world.entrances) {
+    const p = LOCKABLE[e.type] || 0;
+    if (p && hash2(e.id, 7, seed) < p && Math.abs(e.ret.x - world.start.x) + Math.abs(e.ret.y - world.start.y) > 20) e.locked = true;
+  }
+}
+function seedOverworldKeys(world, seed) {
+  const m = world.map, R = mulberry32(seed ^ 0x51ed270b);
+  for (const p of world.pois) {
+    if (['camp', 'village', 'ruins', 'stones', 'oasis'].indexOf(p.type) < 0 || R() > 0.75) continue;
+    for (let k = 0; k < 30; k++) {
+      const x = p.hub.x + Math.round((R() - 0.5) * 8), y = p.hub.y + Math.round((R() - 0.5) * 6), i = y * m.w + x;
+      if (!m.inb(x, y) || m.solid[i] || m.water[i] || m.road[i] || m.entr.has(i) || m.glyph[i]) continue;
+      Combat.placeLive(m, x, y, 'key');
+      break;
     }
   }
 }

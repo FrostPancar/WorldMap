@@ -47,7 +47,7 @@ function addStairsDown(m, ent, depth, seed) {
   if (!cand.length) return;
   const i = cand[Math.floor(R() * cand.length)];
   m.glyph[i] = G.stairsDown;
-  m.entr.set(i, { id: ent.id + '>' + (depth + 1), type: ent.type, seed: ent.seed, depth: depth + 1 });
+  m.entr.set(i, { id: ent.id + '>' + (depth + 1), type: ent.type, seed: ent.seed, depth: depth + 1, locked: hash2(depth, 3, seed) < 0.4 });
   const x = i % m.w, y = (i / m.w) | 0;
   m.chunks[((y / CH) | 0) * m.cw + ((x / CH) | 0)].emit.push(i);
   m.cache.clear();

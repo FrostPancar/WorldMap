@@ -194,12 +194,21 @@ function update(dt) {
     const [dx, dy] = DIRS[dir];
     if (m.entr.has((p.y + dy) * m.w + p.x + dx) || m.entr.has((p.ty + dy) * m.w + p.tx + dx)) { if (!p.moving) p.face = dir; dir = null; }
   }
-  if (dir && !p.moving) { const [bx, by] = DIRS[dir]; if (m.inb(p.x + bx, p.y + by)) Combat.tryOpen(p.x + bx, p.y + by); }
+  if (dir && !p.moving) {
+    const [bx, by] = DIRS[dir], nx = p.x + bx, ny = p.y + by;
+    if (m.inb(nx, ny)) {
+      Combat.tryOpen(nx, ny);
+      // locked doors need a key
+      const le = m.entr.get(ny * m.w + nx);
+      if (Combat.isLocked(le) && !Combat.tryUnlock(le, nx, ny)) { p.face = dir; dir = null; }
+    }
+  }
   const arrived = p.update(dt, m, dir, input.run || input.touchRun);
   if (arrived) {
     if (m === game.world.map) MapView.reveal(p.x, p.y, 13);
     const e = m.entr.get(p.y * m.w + p.x);
     if (e) { if (e.exit) exitInterior(); else enterInterior(e); }
+    if ((m.glyph[p.y * m.w + p.x] & 0x7fff) === G.key) { Combat.clearCell(m, p.x, p.y); Combat.addKey(1); }
     Sound.stepSound(m === game.world.map ? m.biome[p.y * m.w + p.x] : -1);
     for (let k = 0; k < 2; k++) spawnParticle('step', p.x * TS + 2 + Math.random() * 4, p.y * TS + 7, (Math.random() - 0.5) * 6, -2 - Math.random() * 3, 0.35);
   }
@@ -285,7 +294,7 @@ function ambientParticles(dt) {
 function render() {
   const v = game.view, S = layers.scene.ctx, L = layers.light.ctx, E = layers.emit.ctx;
   const P = {
-    camX: 0, camY: 0, amb: [1, 1, 1], emitK: 1, levels: 5, haze: 1, threshold: 0.62, viewW: v.VW, viewH: v.VH,
+    camX: 0, camY: 0, amb: [1, 1, 1], emitK: 1, levels: 5, haze: 1, threshold: 0.7, viewW: v.VW, viewH: v.VH,
     fracX: 0, fracY: 0, time: game.time, fade: game.fade, curve: 0.045, scan: 0.55, bloom: 0.85, ca: 0.38,
   };
   if (game.mode === 'map') {
@@ -348,7 +357,7 @@ function renderWorld(S, L, E, P) {
   for (const c of m.creatures) {
     const d = GLYPHS[c.g];
     const lift = d.h - TS + (d.tags.includes('float') ? 3 + Math.round(Math.sin(t * 2.2 + c.ph) * 2) : 0);
-    const px = Math.round(c.px - ox), py = Math.round(c.py - oy) - lift;
+    const px = Math.round(c.px - ox) + (c.hitT > 0 ? Math.round(Math.sin(t * 70 + c.ph)) : 0), py = Math.round(c.py - oy) - lift - (c.hitT > 0.15 ? 1 : 0);
     if (px < -8 || py < -d.h || px > v.SW || py > v.SH) continue;
     const fr = c.moving ? Math.floor(c.t * 2) % 2 : (Math.sin(t * 2 + c.ph) > 0.85 ? 1 : 0);
     S.drawImage(spr(c.g, fr, c.flip), px, py);
@@ -376,8 +385,9 @@ function renderWorld(S, L, E, P) {
   // player
   const pf0 = p.sprite()[1];
   const [pg, pf, pflip] = Coop.sprite(p.face, pf0, Coop.myColor(), Coop.look.ch, p);
-  const ppx = Math.round(p.px - ox), ppy = Math.round(p.py - oy);
+  const ppx = Math.round(p.px - ox) + (p.hitT > 0 ? Math.round(Math.sin(t * 70)) : 0), ppy = Math.round(p.py - oy);
   S.drawImage(spr(pg, pf, pflip), ppx, ppy);
+  if (p.hitT > 0) { E.globalAlpha = Math.min(1, p.hitT * 3); E.drawImage(spr(pg, pf, pflip), ppx, ppy); E.globalAlpha = 1; }
   E.globalAlpha = 0.22; E.drawImage(spr(pg, pf, pflip), ppx, ppy); E.globalAlpha = 1;
 
   Powers.render(S, E, ox, oy, v.SW, v.SH, t);
@@ -442,6 +452,8 @@ function boot() {
   seedOverworldOrbs(game.world, seed);
   seedOverworldItems(game.world, seed);
   seedUrbanEnemies(game.world, seed);
+  lockEntrances(game.world, seed);
+  seedOverworldKeys(game.world, seed);
   Combat.number(game.world.map);
   Combat.hp = Combat.maxHp();
   game.player.place(game.world.start.x, game.world.start.y);
