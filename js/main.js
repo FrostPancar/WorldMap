@@ -102,6 +102,7 @@ function enterInterior(ent) {
     if (!im) { im = genInterior(ent); game.interiors.set(ent.id, im); }
     game.stack.push(back);
     game.ret = ent; game.map = im;
+    game.lockUntil = game.time + 2 + 1 / game.fadeSpeed; // no leaving for 2s once the room is visible
     game.player.place(im.spawn.x, im.spawn.y); game.player.face = 'down';
     particles.length = 0;
     snapCamera();
@@ -111,6 +112,7 @@ function exitInterior() {
   fadeTo(() => {
     const back = game.stack.pop() || { map: game.world.map, x: game.world.start.x, y: game.world.start.y, ent: null };
     game.map = back.map; game.ret = back.ent;
+    game.lockUntil = back.map === game.world.map ? 0 : game.time + 2 + 1 / game.fadeSpeed;
     game.player.place(back.x, back.y); game.player.face = 'down';
     particles.length = 0;
     snapCamera();
@@ -172,7 +174,12 @@ function update(dt) {
   if (game.mode === 'map') { MapView.update(dt, input); return; }
 
   const m = game.map, p = game.player;
-  const dir = game.pending ? null : input.dir();
+  let dir = game.pending ? null : input.dir();
+  if (dir && m !== game.world.map && game.time < (game.lockUntil || 0)) {
+    // for the first seconds in a space its exits stay shut
+    const [dx, dy] = DIRS[dir];
+    if (m.entr.has((p.y + dy) * m.w + p.x + dx) || m.entr.has((p.ty + dy) * m.w + p.tx + dx)) { if (!p.moving) p.face = dir; dir = null; }
+  }
   const arrived = p.update(dt, m, dir, input.run || input.touchRun);
   if (arrived) {
     if (m === game.world.map) MapView.reveal(p.x, p.y, 13);
@@ -207,6 +214,18 @@ function ambientParticles(dt) {
     const x = Math.floor((game.camX + Math.random() * v.VW) / TS), y = Math.floor((game.camY + Math.random() * v.VH) / TS);
     if (!m.inb(x, y)) continue;
     const i = y * m.w + x, wx = x * TS + Math.random() * TS, wy = y * TS + Math.random() * TS, r = Math.random();
+    if (!over && m.dream && m.dream.parts.length) {
+      if (r < 0.03) {
+        const k = m.dream.parts[Math.floor(Math.random() * m.dream.parts.length)];
+        if (k === 'rain') spawnParticle(k, wx, wy - 30, -8, 110, 0.5);
+        else if (k === 'bubbleUp') spawnParticle(k, wx, wy, 0, -10 - Math.random() * 6, 2.5);
+        else if (k === 'star' || k === 'gold') spawnParticle(k, wx, wy, 0, k === 'gold' ? -2 : 0, 1.2);
+        else if (k === 'firefly' || k === 'mote') spawnParticle(k, wx, wy, 0, 0, 4);
+        else if (k === 'dust' || k === 'ash') spawnParticle(k, wx, wy, 10, 2, 2.5);
+        else spawnParticle(k, wx, wy - 24, 0, 9 + Math.random() * 6, 4);
+      }
+      continue;
+    }
     if (!over) {
       if (r < 0.025) spawnParticle('mote', wx, wy, (Math.random() - 0.5) * 3, -1 - Math.random() * 2, 3 + Math.random() * 3);
       else if (m.water[i] && r < 0.06) spawnParticle('twinkle', wx, wy, 0, 0, 0.5);
@@ -252,7 +271,11 @@ function render() {
     MapView.render(S, E, v.VW, v.VH, game.time, game.player, game.world.pois);
     L.fillStyle = 'rgb(128,128,128)'; L.fillRect(0, 0, v.SW, v.SH);
     P.threshold = 0.75; P.bloom = 0.7; P.scan = 0.35; P.ca = 0.3;
-  } else renderWorld(S, L, E, P);
+  } else {
+    renderWorld(S, L, E, P);
+    const fx = game.map.dream && game.map.dream.fx;
+    if (fx) { P.warp = fx.warp || 0; P.hue = fx.hue || 0; P.mono = fx.mono || 0; if (fx.ca) P.ca = 0.38 * (1 + fx.ca); }
+  }
   if (post.ok) post.render(layers.scene.c, layers.light.c, layers.emit.c, P);
   else {
     ctx2d.imageSmoothingEnabled = false;
@@ -299,9 +322,10 @@ function renderWorld(S, L, E, P) {
 
   // creatures
   for (const c of m.creatures) {
-    const px = Math.round(c.px - ox), py = Math.round(c.py - oy);
-    if (px < -8 || py < -8 || px > v.SW || py > v.SH) continue;
     const d = GLYPHS[c.g];
+    const lift = d.h - TS + (d.tags.includes('float') ? 3 + Math.round(Math.sin(t * 2.2 + c.ph) * 2) : 0);
+    const px = Math.round(c.px - ox), py = Math.round(c.py - oy) - lift;
+    if (px < -8 || py < -d.h || px > v.SW || py > v.SH) continue;
     const fr = c.moving ? Math.floor(c.t * 2) % 2 : (Math.sin(t * 2 + c.ph) > 0.85 ? 1 : 0);
     S.drawImage(spr(c.g, fr, c.flip), px, py);
     if (d.emit) { E.globalAlpha = 0.6; E.drawImage(spr(c.g, fr, c.flip, true), px, py); E.globalAlpha = 1; }
@@ -332,7 +356,7 @@ function renderWorld(S, L, E, P) {
     amb = ds.amb.map((a) => a * lerp(game.bamb, 1, day * 0.6));
     lightK = 1 - day * 0.7;
     P.emitK = 0.5 + 0.5 * (1 - day);
-  } else { amb = m.ambient; lightK = 1; }
+  } else { amb = m.ambient; lightK = m.dream ? m.dream.light : 1; }
   P.amb = amb;
   L.globalCompositeOperation = 'source-over';
   L.fillStyle = `rgb(${amb[0] * 127.5 | 0},${amb[1] * 127.5 | 0},${amb[2] * 127.5 | 0})`;
@@ -356,8 +380,8 @@ function renderWorld(S, L, E, P) {
     }
   }
   // the player carries a soft glow
-  drawLight(p.px + 4, p.py + 4, [190, 220, 255], over ? 46 : 52, over ? 0.9 * (1 - day * 0.8) : 1.1);
-  for (const f of friends) drawLight(f.px + 4, f.py + 4, [190, 220, 255], over ? 46 : 52, over ? 0.9 * (1 - day * 0.8) : 1.1);
+  drawLight(p.px + 4, p.py + 4, [190, 220, 255], over ? 46 : 52, over ? 0.9 * (1 - day * 0.8) : 1.1 * lightK);
+  for (const f of friends) drawLight(f.px + 4, f.py + 4, [190, 220, 255], over ? 46 : 52, over ? 0.9 * (1 - day * 0.8) : 1.1 * lightK);
   L.globalAlpha = 1; L.globalCompositeOperation = 'source-over';
 }
 

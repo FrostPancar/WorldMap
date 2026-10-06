@@ -64,13 +64,21 @@ void main(){
 const FS_FINAL = GLSL_COMMON + `
 uniform sampler2D uC, uB1, uB2;
 uniform vec2 uSRes, uView, uFrac;
-uniform float uTime, uFade, uCurve, uScan, uBloom, uCA;
+uniform float uTime, uFade, uCurve, uScan, uBloom, uCA, uWarp, uHue, uMono;
+vec3 hueRot(vec3 c, float a){
+  vec3 yiq = mat3(0.299, 0.596, 0.211, 0.587, -0.274, -0.523, 0.114, -0.322, 0.312) * c;
+  float h = atan(yiq.z, yiq.y) + a, ch = length(yiq.yz);
+  yiq.y = ch * cos(h); yiq.z = ch * sin(h);
+  return mat3(1.0, 1.0, 1.0, 0.956, -0.272, -1.106, 0.621, -0.647, 1.703) * yiq;
+}
 vec3 fetch(vec2 p){ return texture2D(uC, vec2((floor(p.x) + 0.5) / uSRes.x, 1.0 - (floor(p.y) + 0.5) / uSRes.y)).rgb; }
 void main(){
   vec2 cc = v - 0.5;
   float r2 = dot(cc, cc);
   vec2 uv = 0.5 + cc * (1.0 + uCurve * r2);
   vec2 sp = vec2(uv.x * uView.x, (1.0 - uv.y) * uView.y) + 1.0 + uFrac;
+  sp.x += sin(sp.y * 0.09 + uTime * 1.7) * uWarp;
+  sp.y += sin(sp.x * 0.07 + uTime * 1.1) * uWarp * 0.5;
   float ca = uCA * (0.3 + 1.6 * r2);
   vec3 col;
   col.r = fetch(sp + vec2(ca, 0.0)).r;
@@ -80,6 +88,8 @@ void main(){
   vec2 buv = vec2(sp.x / uSRes.x, 1.0 - sp.y / uSRes.y);
   vec3 bl = texture2D(uB1, buv).rgb * 2.0 * 0.9 + texture2D(uB2, buv).rgb * 2.0 * 1.4;
   col += bl * uBloom;
+  if (uHue > 0.0) col = max(hueRot(col, uTime * uHue), 0.0);
+  col = mix(col, vec3(dot(col, vec3(0.3, 0.59, 0.11))) * vec3(1.08, 0.96, 0.78), uMono);
   vec2 f = fract(sp);
   float scan = mix(1.0, 0.74 + 0.26 * sin(f.y * 3.14159), uScan);
   float grille = mix(1.0, 0.9 + 0.1 * sin(f.x * 3.14159), uScan);
@@ -192,6 +202,7 @@ class Post {
       gl.uniform2f(u.uSRes, this.SW, this.SH); gl.uniform2f(u.uView, P.viewW, P.viewH);
       gl.uniform2f(u.uFrac, P.fracX, P.fracY); gl.uniform1f(u.uTime, P.time); gl.uniform1f(u.uFade, P.fade);
       gl.uniform1f(u.uCurve, P.curve); gl.uniform1f(u.uScan, P.scan); gl.uniform1f(u.uBloom, P.bloom); gl.uniform1f(u.uCA, P.ca);
+      gl.uniform1f(u.uWarp, P.warp || 0); gl.uniform1f(u.uHue, P.hue || 0); gl.uniform1f(u.uMono, P.mono || 0);
     });
   }
 }

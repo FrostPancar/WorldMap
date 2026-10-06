@@ -27,6 +27,8 @@ function genInterior(ent) {
       m = genRoom(seed, ent.type); break;
     default: m = genCave(seed, false, null, depth);
   }
+  applyDream(m, ent, seed);
+  m.finalize();
   if (depth) m.ambient = m.ambient.map((a) => a * Math.pow(0.8, depth));
   if (DEEP[ent.type] && depth < DEEP_MAX) addStairsDown(m, ent, depth, seed);
   return m;
@@ -269,7 +271,7 @@ function genDungeon(seed, crypt) {
     if (floor[i]) continue;
     m.solid[i] = 1;
     if (wallEdge(floor, W, H, x, y)) {
-      m.bg[i] = 0;
+      m.bg[i] = 1;
       const below = y < H - 1 && floor[i + W];
       if (below && R() < 0.12) m.glyph[i] = G[torch];
       else m.glyph[i] = G[R() < 0.82 ? brick : 'caveRockDungeon'];
