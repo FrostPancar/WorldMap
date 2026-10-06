@@ -154,6 +154,7 @@ function dayState(t) {
 function update(dt) {
   game.time += dt;
   game.day = (game.day + dt / 360) % 1;
+  if (Coop.room) game.day = (Date.now() / 1000 / 360 + 0.79) % 1;
   if (game.fadeDir) {
     game.fade += game.fadeDir * dt * game.fadeSpeed;
     if (game.fadeDir === 1 && game.fade >= 1) {
@@ -174,6 +175,7 @@ function update(dt) {
     if (e) { if (e.exit) exitInterior(); else enterInterior(e); }
     for (let k = 0; k < 2; k++) spawnParticle('step', p.x * TS + 2 + Math.random() * 4, p.y * TS + 7, (Math.random() - 0.5) * 6, -2 - Math.random() * 3, 0.35);
   }
+  Coop.update(dt, p);
   const lim = 44;
   for (const c of m.creatures) {
     if (Math.abs(c.x - p.x) > lim || Math.abs(c.y - p.y) > lim) continue;
@@ -293,8 +295,18 @@ function renderWorld(S, L, E, P) {
     S.drawImage(spr(c.g, fr, c.flip), px, py);
     if (d.emit) { E.globalAlpha = 0.6; E.drawImage(spr(c.g, fr, c.flip, true), px, py); E.globalAlpha = 1; }
   }
+  // co-op friends on this map
+  const friends = Coop.here();
+  for (const f of friends) {
+    const [fg, ff, fflip] = Coop.sprite(f.face, f.moving ? Math.floor(f.animT * 9) % 2 : 0, f.c);
+    const fx = Math.round(f.px - ox), fy = Math.round(f.py - oy);
+    if (fx < -8 || fy < -8 || fx > v.SW || fy > v.SH) continue;
+    S.drawImage(spr(fg, ff, fflip), fx, fy);
+    E.globalAlpha = 0.22; E.drawImage(spr(fg, ff, fflip), fx, fy); E.globalAlpha = 1;
+  }
   // player
-  const [pg, pf, pflip] = p.sprite();
+  let [pg, pf, pflip] = p.sprite();
+  if (Coop.room) [pg, pf, pflip] = Coop.sprite(p.face, pf, Coop.myColor());
   const ppx = Math.round(p.px - ox), ppy = Math.round(p.py - oy);
   S.drawImage(spr(pg, pf, pflip), ppx, ppy);
   E.globalAlpha = 0.22; E.drawImage(spr(pg, pf, pflip), ppx, ppy); E.globalAlpha = 1;
@@ -334,6 +346,7 @@ function renderWorld(S, L, E, P) {
   }
   // the player carries a soft glow
   drawLight(p.px + 4, p.py + 4, [190, 220, 255], over ? 46 : 52, over ? 0.9 * (1 - day * 0.8) : 1.1);
+  for (const f of friends) drawLight(f.px + 4, f.py + 4, [190, 220, 255], over ? 46 : 52, over ? 0.9 * (1 - day * 0.8) : 1.1);
   L.globalAlpha = 1; L.globalCompositeOperation = 'source-over';
 }
 
@@ -359,6 +372,7 @@ function boot() {
   snapCamera();
   window.__genMs = performance.now() - t0;
   window.game = game;
+  Coop.init();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(() => setTimeout(boot, 30));
