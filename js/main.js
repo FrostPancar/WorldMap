@@ -37,7 +37,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') input.run = true;
   if (e.repeat) return;
   if (e.code === 'KeyM' || e.code === 'Tab') { e.preventDefault(); toggleMap(); }
-  if (e.code === 'Escape' && game.mode === 'map') toggleMap();
+  if (e.code === 'Escape') { if (game.mode === 'map') toggleMap(); else CoopUI.toggle(); }
   if (game.mode === 'map') {
     if (e.code === 'KeyE' || e.code === 'Equal' || e.code === 'NumpadAdd') MapView.zoomBy(1);
     if (e.code === 'KeyQ' || e.code === 'Minus' || e.code === 'NumpadSubtract') MapView.zoomBy(-1);

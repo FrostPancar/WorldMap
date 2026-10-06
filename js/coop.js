@@ -226,7 +226,7 @@ const CoopUI = {
     const input = panel.querySelector('#coop-code');
     const q = new URLSearchParams(location.search);
     input.value = q.get('room') || Math.random().toString(36).slice(2, 7);
-    btn.onclick = () => { panel.classList.toggle('open'); if (panel.classList.contains('open')) input.focus(); else document.getElementById('cvs').focus(); };
+    btn.onclick = () => this.toggle();
     const join = () => {
       const code = input.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
       if (!code) return;
@@ -236,7 +236,7 @@ const CoopUI = {
       panel.classList.remove('open'); document.getElementById('cvs').focus();
     };
     panel.querySelector('#coop-join').onclick = join;
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); e.stopPropagation(); });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); if (e.key === 'Escape') this.toggle(false); e.stopPropagation(); });
     input.addEventListener('keyup', (e) => e.stopPropagation());
     panel.querySelector('#coop-copy').onclick = (e) => {
       const code = input.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
@@ -248,6 +248,13 @@ const CoopUI = {
     if (typeof Peer === 'undefined') { btn.style.display = 'none'; }
     if (q.get('room')) Coop.join(input.value.trim().toLowerCase(), seed);
     this.refresh();
+  },
+  toggle(open) {
+    const p = this.panel;
+    if (!p || this.btn.style.display === 'none') return;
+    if (open === undefined) open = !p.classList.contains('open');
+    p.classList.toggle('open', open);
+    if (open) { const i = p.querySelector('#coop-code'); i.focus(); i.select(); } else document.getElementById('cvs').focus();
   },
   go(code, seed) { location.search = `?room=${code}&seed=${seed}`; },
   refresh() {
