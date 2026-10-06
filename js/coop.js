@@ -198,11 +198,11 @@ const CoopUI = {
     this.seed = seed;
     const css = document.createElement('style');
     css.textContent = `
-      #coop-btn{position:fixed;right:14px;bottom:14px;width:34px;height:34px;border:1px solid #3a3a46;background:#0b0b10cc;
+      #coop-btn{position:fixed;left:14px;bottom:14px;width:34px;height:34px;border:1px solid #3a3a46;background:#0b0b10cc;
         color:#cfcfc4;font:16px monospace;cursor:pointer;border-radius:6px;display:flex;align-items:center;justify-content:center;z-index:5;padding:0}
       #coop-btn:hover{border-color:#8a8a96}
       #coop-btn .dot{position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:#555}
-      #coop-panel{position:fixed;right:14px;bottom:56px;width:228px;background:#0b0b10f0;border:1px solid #3a3a46;border-radius:6px;
+      #coop-panel{position:fixed;left:14px;bottom:56px;width:228px;background:#0b0b10f0;border:1px solid #3a3a46;border-radius:6px;
         color:#cfcfc4;font:12px/1.4 monospace;padding:12px;z-index:5;display:none;box-sizing:border-box}
       #coop-panel.open{display:block}
       #coop-panel label{display:block;color:#8a8a96;margin:0 0 4px}
