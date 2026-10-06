@@ -16,7 +16,10 @@ function makeCreature(name, x, y, biome, R) {
 function updateCreature(c, m, dt, pl) {
   // pets follow the player, enemies chase when close, everything else wanders
   if (c.npc) { c.px = c.x * TS; c.py = c.y * TS; return; } // traders stay at their post
-  const pdx = pl.x - c.x, pdy = pl.y - c.y, pd = Math.abs(pdx) + Math.abs(pdy);
+  // a world boss fights you near its lair and walks home when you leave
+  const away = c.home && Math.abs(pl.x - c.home.x) + Math.abs(pl.y - c.home.y) > WorldBosses.AGGRO;
+  const gx = away ? c.home.x : pl.x, gy = away ? c.home.y : pl.y;
+  const pdx = gx - c.x, pdy = gy - c.y, pd = Math.abs(pdx) + Math.abs(pdy);
   // bosses always hunt you; other enemies lose you while you wear a possessed body
   const chase = c.enemy && (c.boss ? pd < 40 : pd < 7 && !Powers.possess), follow = c.pet && pd > 2;
   const speed = (c.pet ? 7 : c.boss ? (c.dash > 0 ? 9 : c.boss.spd) : chase ? 3.6 : c.speed) * (c.slow > 0 ? 0.4 : 1);
@@ -25,7 +28,7 @@ function updateCreature(c, m, dt, pl) {
     if (c.t >= 1) { c.t = 1; c.moving = false; c.wait = (chase || follow) ? 0.05 : 0.2 + Math.random() * (Math.random() < 0.3 ? 4 : 1.2); }
   } else {
     c.wait -= dt;
-    if (c.pet && pd > 14) { // a pet left far behind catches up
+    if (c.pet && pd > 14 && !c.boss) { // a pet left far behind catches up
       c.x = c.fx = pl.x; c.y = c.fy = pl.y + (m.blocked(pl.x, pl.y + 1) ? 0 : 1);
     } else if (c.wait <= 0) {
       const tries = [];
@@ -64,7 +67,7 @@ class Player {
   // returns true when the player arrived on a new tile this frame
   update(dt, m, dir, run) {
     let arrived = false;
-    const speed = run ? 11 : 6.5;
+    const speed = (run ? 11 : 6.5) * Combat.speedK();
     if (this.moving) {
       this.t += dt * speed;
       this.animT += dt;

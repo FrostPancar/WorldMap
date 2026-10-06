@@ -96,7 +96,7 @@ function baseName(c) { return GLYPHS[c.g].name; }
 
 const Combat = {
   projectiles: [], slashes: [], gems: [], numbers: [], cd: 0, toast: null, hurtT: 0,
-  inv: ['sling'], eq: 0, xp: 0, ability: 0, specials: ['beam'], bossDown: new Set(), talkT: -9,
+  inv: ['sling'], eq: 0, xp: 0, ability: 0, specials: ['beam'], bossDown: new Set(), talkT: -9, crystals: [], worldDown: new Set(),
   hp: 8, invT: 0, deathT: 0, lastHurt: -99, regenT: 0, auth: true, heartsT: 0, keys: 0, unlocked: new Set(),
   hitBuf: [], tameBuf: [], esBuf: [], seq: 1, snapT: 0, atkEvt: null,
 
@@ -111,24 +111,30 @@ const Combat = {
         if (Array.isArray(s.sp)) this.specials = ['beam'].concat(s.sp.filter((k) => SPECIALS[k] && k !== 'beam'));
         this.ability = clamp(s.ab | 0, 0, this.specials.length - 1);
         this.bossDown = new Set(Array.isArray(s.bd) ? s.bd.map(String) : []);
+        if (Array.isArray(s.cr)) this.crystals = s.cr.filter((k) => Number.isInteger(k) && k >= 0 && k < CRYSTAL_SLOTS);
+        this.worldDown = new Set(Array.isArray(s.wd) ? s.wd.filter((k) => Number.isInteger(k)) : []);
       }
     } catch (e) { /* fresh start */ }
   },
   save() {
     try {
       localStorage.setItem('worldmap-combat', JSON.stringify({ inv: this.inv, eq: this.eq, xp: this.xp, keys: this.keys, un: [...this.unlocked].slice(-300),
-        sp: this.specials, ab: this.ability, bd: [...this.bossDown] }));
+        sp: this.specials, ab: this.ability, bd: [...this.bossDown], cr: this.crystals, wd: [...this.worldDown] }));
     } catch (e) { /* no storage */ }
   },
   special() { return this.specials[this.ability] || 'beam'; },
   item() { return ITEMS[this.inv[this.eq]] || ITEMS.sling; },
   level() { return Math.floor(Math.sqrt(this.xp / 6)) + 1; },
   levelXp(l) { return (l - 1) * (l - 1) * 6; },
-  power() { return 1 + (this.level() - 1) * 0.12; },
+  power() { return (1 + (this.level() - 1) * 0.12) * (this.has(3) ? 1.25 : 1); },
+  // crystals from world bosses (see CRYSTALS in js/worldbosses.js)
+  has(k) { return this.crystals.indexOf(k) >= 0; },
+  speedK() { return this.has(4) ? 1.15 : 1; },
+  chargeK() { return this.has(1) ? 1.4 : 1; },
   say(text, icon) { this.toast = { text, icon, life: 2.2 }; },
   showHearts() { this.heartsT = 2.6; },
 
-  maxHp() { return 8 + (this.level() - 1) * 2; },
+  maxHp() { return 8 + (this.level() - 1) * 2 + (this.has(2) ? 4 : 0); },
   ensure(c) {
     if (c.maxhp !== undefined) return;
     const def = ENEMY_DEF[baseName(c)];
@@ -160,7 +166,7 @@ const Combat = {
     }
     const a = aim ? Math.atan2(aim.y - y0, aim.x - x0) : { up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0 }[p.face];
     if (!p.moving) p.face = Math.abs(Math.cos(a)) > Math.abs(Math.sin(a)) ? (Math.cos(a) > 0 ? 'right' : 'left') : (Math.sin(a) > 0 ? 'down' : 'up');
-    this.cd = it.cd;
+    this.cd = it.cd * (this.has(4) ? 0.85 : 1);
     this.fire(it, x0, y0, a, aim, 'player');
     this.atkEvt = { s: this.seq++, id: this.inv[this.eq], a: Math.round(a * 100) / 100, d: aim ? Math.round(Math.hypot(aim.x - x0, aim.y - y0)) : 56 };
   },
@@ -406,9 +412,9 @@ const Combat = {
     this.invT = Math.max(0, this.invT - dt);
     if (p.hitT > 0) p.hitT -= dt;
     this.auth = this.amAuth();
-    if (this.hp < this.maxHp() && this.deathT <= 0 && game.time - this.lastHurt > 6) {
+    if (this.hp < this.maxHp() && this.deathT <= 0 && game.time - this.lastHurt > (this.has(0) ? 3 : 6)) {
       this.regenT -= dt;
-      if (this.regenT <= 0) { this.regenT = 3.5; this.hp = Math.min(this.maxHp(), this.hp + 1); this.showHearts(); }
+      if (this.regenT <= 0) { this.regenT = this.has(0) ? 1.4 : 3.5; this.hp = Math.min(this.maxHp(), this.hp + 1); this.showHearts(); }
     }
     if (this.toast && (this.toast.life -= dt) <= 0) this.toast = null;
     // creatures: befriending, pets, enemies
@@ -458,6 +464,7 @@ const Combat = {
       }
     }
     if (this.auth) Bosses.update(dt, m);
+    WorldBosses.update(dt);
     // projectiles
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const pr = this.projectiles[i];
@@ -653,10 +660,10 @@ const Combat = {
     }
     // creature overlays: hearts above pets, health bars on hurt enemies
     for (const c of m.creatures) {
-      const gd = GLYPHS[c.g], x = Math.round(c.px - ox) - ((gd.w - TS) >> 1), y = Math.round(c.py - oy) - (gd.h - TS);
-      if (x < -16 || y < -16 || x > W || y > H) continue;
+      const gd = GLYPHS[c.g], x = Math.round(c.px - ox) - ((gd.w - TS) >> 1), y = Math.round(c.py - oy) - (gd.tags.includes('center') ? (gd.h - TS) >> 1 : gd.h - TS);
+      if (x < -gd.w || y < -gd.h || x > W || y > H) continue;
       // red eyes cast a little light of their own
-      if (c.enemy && !c.dead) L.push({ x: c.px + 4, y: c.py + 2 - (gd.h - TS), rgb: [255, 40, 30], r: c.boss ? 22 : 10, i: c.boss ? 0.8 : 0.4 });
+      if (c.enemy && !c.dead) L.push({ x: c.px + 4, y: y + oy + 2, rgb: [255, 40, 30], r: c.boss ? 22 : 10, i: c.boss ? 0.8 : 0.4 });
       // the special trader: a lantern glow and a bobbing sword sign above the hood
       if (c.npc) {
         L.push({ x: c.px + 6, y: c.py - 2, rgb: [255, 216, 144], r: 34, i: 0.9 });
@@ -752,6 +759,7 @@ const Combat = {
       drawText(S, s, x, y, n.col); drawText(E, s, x, y, n.col);
     }
     S.globalAlpha = 1; E.globalAlpha = 1;
+    WorldBosses.render(S, E, ox, oy, W, H, t, L);
   },
   // --- co-op: one player runs the enemies on each map -----------------------------------------------
   // The player with the smallest id on a map is its authority: it simulates
@@ -866,7 +874,8 @@ const Combat = {
   // screen-space HUD: equipped item, ability, level and XP bar, and a toast line
   hud(S, E, VW, VH) {
     // boss health bar along the bottom while one is alive here
-    const boss = game.map && game.map.creatures.find((c) => c.boss && !c.dead);
+    const p = game.player;
+    const boss = game.map && game.map.creatures.find((c) => c.boss && !c.dead && Math.abs(c.x - p.x) + Math.abs(c.y - p.y) < 22);
     if (boss && boss.maxhp) {
       const w = Math.min(160, Math.round(VW * 0.6)), x = Math.round(VW / 2 - w / 2), y = Math.round(VH) - 14, f = clamp(boss.hp / boss.maxhp, 0, 1);
       const name = boss.boss.name;

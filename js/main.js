@@ -385,7 +385,7 @@ function renderWorld(S, L, E, P) {
   // creatures
   for (const c of m.creatures) {
     const d = GLYPHS[c.g];
-    const lift = d.h - TS + (d.tags.includes('float') ? 3 + Math.round(Math.sin(t * 2.2 + c.ph) * 2) : 0);
+    const lift = (d.tags.includes('center') ? (d.h - TS) >> 1 : d.h - TS) + (d.tags.includes('float') ? 3 + Math.round(Math.sin(t * 2.2 + c.ph) * 2) : 0);
     // wide sprites (bosses) stay centred on their tile
     const px = Math.round(c.px - ox) - ((d.w - TS) >> 1) + (c.hitT > 0 ? Math.round(Math.sin(t * 70 + c.ph)) : 0), py = Math.round(c.py - oy) - lift - (c.hitT > 0.15 ? 1 : 0);
     if (px < -d.w || py < -d.h || px > v.SW || py > v.SH) continue;
@@ -497,6 +497,7 @@ function boot() {
   seedUrbanEnemies(game.world, seed);
   lockEntrances(game.world, seed);
   seedOverworldKeys(game.world, seed);
+  seedWorldBosses(game.world);
   Combat.number(game.world.map);
   Combat.hp = Combat.maxHp();
   game.player.place(game.world.start.x, game.world.start.y);

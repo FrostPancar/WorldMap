@@ -766,6 +766,43 @@ function genOverworld(seed) {
     }
   }
 
+  // five world-boss lairs, each in its boss's home biome: a wide clearing
+  // ringed with themed stones and lights, away from the middle of the map
+  {
+    const RL = mulberry32((seed ^ 0x1a12b055) >>> 0);
+    WORLD_BOSSES.forEach((WB, k) => {
+      for (let t = 0; t < 50000; t++) {
+        const relax = t > 25000;
+        const cx = 14 + Math.floor(RL() * (W - 28)), cy = 14 + Math.floor(RL() * (H - 28)), ci = cy * W + cx;
+        if (!mainland(ci) || reserved[ci] || (!relax && WB.biomes.indexOf(biome[ci]) < 0) || biome[ci] === B.OCEAN) continue;
+        if (edge[ci] < (relax ? 2 : 4) || Math.hypot(cx - W / 2, cy - H / 2) < 90) continue;
+        if (pois.some((p) => Math.hypot(p.x - cx, p.y - cy) < (p.type === 'lair' ? 90 : 16))) continue;
+        let ok = true;
+        for (let y = cy - 9; y <= cy + 9 && ok; y++) for (let x = cx - 9; x <= cx + 9; x++) {
+          const i = y * W + x;
+          if (!mainland(i) || reserved[i]) { ok = false; break; }
+        }
+        if (!ok) continue;
+        clearArea(cx, cy, 8);
+        for (let j = 0; j < 14; j++) {
+          const a = (j / 14) * Math.PI * 2;
+          const x = Math.round(cx + Math.cos(a) * 8), y = Math.round(cy + Math.sin(a) * 7);
+          if (y > cy && Math.abs(x - cx) <= 2) continue; // the way in, from the south
+          put(x, y, WB.ring, 1); reserved[y * W + x] = 1;
+        }
+        for (const a of [0.8, 2.35, 3.9, 5.5]) {
+          const x = Math.round(cx + Math.cos(a) * 5), y = Math.round(cy + Math.sin(a) * 4.5);
+          put(x, y, WB.light, 1); reserved[y * W + x] = 1;
+        }
+        const poi = { type: 'lair', x: cx, y: cy, hub: { x: cx, y: cy + 8 }, lair: k };
+        pois.push(poi);
+        const hi = poi.hub.y * W + poi.hub.x;
+        m.glyph[hi] = 0; solid[hi] = 0;
+        break;
+      }
+    });
+  }
+
   // 6. Roads --------------------------------------------------------------------
   const cost = new Float32Array(N);
   const PEAKS = new Set(['peak', 'peakOutline', 'peakSnow', 'peakOrange', 'peakOutlineOrange'].map((n) => G[n]));

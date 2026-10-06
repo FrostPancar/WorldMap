@@ -188,6 +188,11 @@ const CoopUI = {
       #coop-panel h2{margin:0 0 10px;font:600 13px monospace;letter-spacing:.2em;color:#f2f0e8;text-align:center}
       #coop-panel hr{border:0;border-top:1px solid #2a2a34;margin:12px 0}
       #coop-panel button.warn{border-color:#6a3a3a;color:#ffb0a0}
+      #menu-crystals{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px}
+      #menu-crystals canvas{display:block;width:100%;height:auto;aspect-ratio:1;image-rendering:pixelated;background:#000;border:1px solid #2a2a34;border-radius:3px;box-sizing:border-box;padding:3px}
+      #menu-crystals canvas.on{border-color:#8a8a96}
+      #menu-crystal-info{color:#8a8a96;min-height:1.4em;font-size:11px}
+      #menu-crystal-info b{color:#f2f0e8;font-weight:normal}
       #coop-panel button.warn.armed{background:#5a1a1a;border-color:#ff6a5a;color:#fff}
       #coop-panel label{display:block;color:#8a8a96;margin:0 0 4px}
       #coop-panel input{width:100%;box-sizing:border-box;background:#000;border:1px solid #3a3a46;color:#f2f0e8;font:13px monospace;
@@ -211,6 +216,7 @@ const CoopUI = {
     panel.innerHTML = `<h2>MENU</h2>
       <div class="row"><button id="menu-resume">Resume</button></div>
       <div class="row" style="margin-top:6px"><button id="menu-restart" class="warn">Restart world</button><button id="menu-new" class="warn">New world</button></div>
+      <hr><label>Crystals</label><div id="menu-crystals"></div><div id="menu-crystal-info"></div>
       <hr><label>Character</label><div class="grid" id="coop-chars"></div><div class="sw" id="coop-cols"></div>
       <label for="coop-code">Room</label><input id="coop-code" maxlength="24" spellcheck="false" autocomplete="off">
       <div class="row"><button id="coop-join">Join</button><button id="coop-copy">Copy link</button></div>
@@ -290,7 +296,26 @@ const CoopUI = {
     if (open === undefined) open = !p.classList.contains('open');
     p.classList.toggle('open', open);
     Sound.sfx('ui');
-    if (open) p.querySelector('#menu-resume').focus(); else document.getElementById('cvs').focus();
+    if (open) { this.buildCrystals(); p.querySelector('#menu-resume').focus(); } else document.getElementById('cvs').focus();
+  },
+  // seven slots; each beaten world boss fills one with its crystal
+  buildCrystals() {
+    const box = this.panel.querySelector('#menu-crystals'), info = this.panel.querySelector('#menu-crystal-info');
+    box.innerHTML = '';
+    const got = Combat.crystals;
+    const show = (k) => {
+      if (k < 0) { info.textContent = got.length ? got.length + ' / ' + CRYSTAL_SLOTS + ' found' : 'Defeat world bosses to collect crystals'; return; }
+      const C = CRYSTALS[k];
+      info.innerHTML = got.indexOf(k) >= 0 ? `<b>${C.name}</b> - ${C.effect}` : 'Not found yet';
+    };
+    for (let k = 0; k < CRYSTAL_SLOTS; k++) {
+      const cv = document.createElement('canvas'); cv.width = 8; cv.height = 8;
+      if (got.indexOf(k) >= 0) { cv.getContext('2d').drawImage(spr(CRYSTALS[k].g, 0, false), 0, 0); cv.className = 'on'; }
+      cv.onmouseenter = cv.onclick = () => show(got.indexOf(k) >= 0 ? k : CRYSTALS[k] ? k : -1);
+      cv.onmouseleave = () => show(-1);
+      box.appendChild(cv);
+    }
+    show(-1);
   },
   isOpen() { return !!(this.panel && this.panel.classList.contains('open')); },
   // start over: forget items, XP, keys, specials, beaten bosses and unlocked doors

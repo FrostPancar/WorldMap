@@ -35,6 +35,18 @@ Append `?seed=1234` to the URL to generate a different world (the default seed i
 - **Dream interiors:** every indoor space is re-dressed in one of 16 surreal themes, in the spirit of Yume Nikki. Homes (houses, hollow trees, witch huts and lighthouses) never have enemies inside. Each theme brings its own patterned floor, re-skinned walls, framed pixel paintings after public-domain works (Mona Lisa, The Starry Night, The Great Wave, Red Fuji, The Scream, Mondrian, Klimt's The Kiss), centrepieces (Moai, a torii gate, a pyramid, a maneki-neko, a sugar skull, a Greek bust, a giant blinking eye, a melting clock), props (Tokyo vending machines, a London phone box, Paris street lamps, chess pieces, marigolds, floating hats and apples), dream-dwellers, particles and a screen effect (warping, hue drift, sepia). The theme is fixed per entrance, so co-op players share the same dream. Exits stay shut for the first 2 seconds in a space.
 - **Powers:** glowing orbs sit near shrines, stone circles, the world tree, volcano shrines and other landmarks, and in about half of the interiors. Walking into one absorbs it (particles arc into you) and changes your power: spark, ember, frost, void, bloom or prism. Holding the button charges a beam, drawn with arced particles spiralling in, then releasing fires it. Beams stop at walls, scatter sparks, shake the screen and knock creatures back. Co-op friends see each other's charge and beams. The `POWERS` table in `js/powers.js` is the place to add future power-up effects.
 - **Boss arenas:** seven colosseum gates stand far apart across the continent. Each takes **two keys** to open and leads to a large open arena with one boss: the Stone Colossus, Cinder Wyrm, Frost Matriarch, Brood Queen, Gridlock Titan, The Watcher and the Hollow King. Bosses cycle through moves (bolt rings, spirals, aimed fans, lobbed volleys, dashes, telegraphed ground slams, summoned minions, blinking next to you) and get faster below half health. A health bar with the boss's name sits at the bottom of the screen. Beating one is remembered, fully heals you and drops two keys and a weapon. Stats and moves are in `BOSSES` in `js/bosses.js`.
+- **World bosses and crystals:** five giants live in lairs out in the open world, each a 4x4-tile version of an enemy you already know, with the same colours and glowing red eyes: the **Mother Spider** (spooky or pine forest), **King Slime** (mushroom grove or marsh), **Ghost Lord** (snow, crystal forest or taiga), **Elder Dragon** (volcano or mountains) and **Garbage Titan** (plains). A lair is a wide clearing ringed with stones or trees and lights, with a skull-like icon on the world map. They move slowly, but their attacks are hard to dodge, though always possible:
+  - bolt rings with a drifting gap to slip through
+  - walls of bolts sweeping toward you with one opening
+  - slow twin spirals
+  - ground marks that fill in and then erupt
+  - root lines racing toward you
+  - aimed volleys that lead your movement
+  - lobbed barrages
+  - leaps onto the spot you're standing on
+  - summoned minions
+
+  Below half health they enrage and attack more often. They only fight near their lair. If you run off, they walk home and heal. Each one drops a **crystal** with a permanent effect: Grave (health regrows sooner and faster), Prism (specials charge 40% faster), Frost (+4 max health), Ember (+25% damage) and Chrome (move 15% faster, attack 15% faster). The Escape menu shows your crystals in 7 slots. Hover over one to read its effect. Stats and patterns are in `WORLD_BOSSES` in `js/worldbosses.js`.
 - **Specials:** every special is channelled. Hold to charge, then release to cast. While you charge a special, its landing spot is previewed. Specials other than the beam need at least a third of a charge, or they fizzle. You start with the beam and learn the rest from traders:
   - **Beam:** the charged beam described under Powers.
   - **Vortex:** a whirlpool at the cursor that drags enemies into its centre, grinds them while it spins, then collapses with a burst. A longer charge makes it bigger, longer-lasting and placeable further away.
@@ -68,7 +80,8 @@ Append `?seed=1234` to the URL to generate a different world (the default seed i
 | `js/main.js` | Loop, input, rendering, transitions |
 | `js/audio.js` | Generative music and synthesised sound effects |
 | `js/powers.js` | Orbs, absorb, channelling, the beam and the specials (vortex, shadow step, starfall) |
-| `js/bosses.js` | Boss sprites, moves and arena interiors |
+| `js/bosses.js` | Arena boss sprites, moves and arena interiors |
+| `js/worldbosses.js` | World bosses (procedurally painted 32x32 sprites), their attack patterns and crystals |
 | `js/dreams.js` | Dream themes for interiors |
 | `js/coop.js` | Co-op over MQTT, the Escape menu (restart, character picker, room, sound) |
 | `js/touch.js` | Touch controls |

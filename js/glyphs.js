@@ -706,6 +706,7 @@ Object.assign(MAP_ICONS, {
   ribs: ['1.1.1', '1.1.1', '11111', '.....', '.....'],
   witch: ['..1..', '.111.', '11111', '.1.1.', '.111.'],
   arena: ['1.1.1', '11111', '1...1', '1.1.1', '11111'],
+  lair: ['1...1', '.111.', '1.1.1', '.111.', '.1.1.'],
 });
 
 // Boss arena gate: a small colosseum facade with a dark central archway.

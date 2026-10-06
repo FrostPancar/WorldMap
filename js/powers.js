@@ -344,7 +344,7 @@ const Powers = {
     const p = game.player, m = game.map;
     if (this.charging) {
       if (!this.canAct()) { this.charging = false; Sound.chargeStop(); }
-      this.charge = Math.min(1, this.charge + dt / SPECIALS[this.special()].time);
+      this.charge = Math.min(1, this.charge + dt * Combat.chargeK() / SPECIALS[this.special()].time);
       Sound.chargeLevel(this.charge);
       this.spawnChargeArcs(p, this.charge, this.chargeKind(), dt);
       if (this.charge >= 1) {

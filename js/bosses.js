@@ -130,6 +130,7 @@ const Bosses = {
   update(dt, m) {
     for (const c of m.creatures) {
       if (!c.boss || c.dead) continue;
+      if (c.boss.world) { WorldBosses.tick(c, dt); continue; }
       const B = c.boss, cx = c.px + 4, cy = c.py + 4;
       const tgt = Combat.nearestPlayer(cx, cy, 30 * TS, true);
       if (c.dash > 0) c.dash -= dt;
@@ -224,6 +225,7 @@ const Bosses = {
   },
   // a boss falls: remember it, then keys, a weapon and a full heal
   defeated(c) {
+    if (c.boss.world) { WorldBosses.defeated(c); return; }
     const m = game.map, B = c.boss;
     if (game.ret) Combat.bossDown.add(String(game.ret.id));
     for (const q of m.creatures) if (q.minion && !q.dead) Combat.kill(q);
