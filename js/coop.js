@@ -173,6 +173,7 @@ const Coop = {
 // flipped with Q and E: character, collectibles (opens here), settings/co-op.
 // On touch screens (no Escape key) a small menu button opens it instead.
 // ---------------------------------------------------------------------------
+defGlyph('icon_gear', ['...11...', '.1.11.1.', '..1111..', '1111.111', '111.1111', '..1111..', '.1.11.1.', '...11...'], ['#9a9aa2']);
 defGlyph('icon_map', ['11111111', '12221221', '12122321', '12212221', '12322121', '12221221', '11111111', '........'],
   ['#8a5a2a', '#e8d8b8', '#d8302a'], { emit: [3] });
 
@@ -208,12 +209,18 @@ const CoopUI = {
       #coop-btn .dot{position:absolute;top:4px;right:4px;width:4px;height:4px;background:#555}
       #menu-back{position:fixed;inset:0;z-index:5;display:none;background:#000a}
       #menu-back.open{display:block}
-      #coop-panel{--px:4px;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;display:none;
-        width:calc(var(--px) * 176);max-width:calc(100% - 24px);max-height:calc(100% - 24px);overflow:auto;box-sizing:border-box;
+      #menu-wrap{--px:4px;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;display:none;flex-direction:column;align-items:center;
+        gap:calc(var(--px) * 6);max-width:calc(100% - 24px);max-height:calc(100% - 24px)}
+      #menu-wrap.open{display:flex}
+      #menu-gems{display:flex;gap:calc(var(--px) * 3);padding:calc(var(--px) * 4);background:#0b0b10;flex:none;
+        box-shadow:0 0 0 var(--px) #f0b030,0 0 0 calc(var(--px) * 2) #0b0b10,0 0 0 calc(var(--px) * 3) #6a4a18}
+      #menu-gems .gem{padding:calc(var(--px) * 2);background:#000;line-height:0;box-shadow:inset 0 0 0 var(--px) #2a2a34}
+      #menu-gems .gem canvas{display:block;image-rendering:pixelated}
+      #menu-gems .gem.empty canvas{opacity:.12}
+      #coop-panel{position:relative;width:calc(var(--px) * 176);max-width:100%;min-height:0;overflow:auto;box-sizing:border-box;
         padding:calc(var(--px) * 6);background:#0b0b10;color:#f2f0e8;outline:none;scrollbar-width:none;
         box-shadow:0 0 0 var(--px) #f2f0e8,0 0 0 calc(var(--px) * 2) #0b0b10,0 0 0 calc(var(--px) * 3) #45454f;
         background-image:repeating-linear-gradient(0deg,#ffffff06 0 var(--px),transparent var(--px) calc(var(--px) * 2))}
-      #coop-panel.open{display:block}
       #coop-panel canvas.px{display:block;image-rendering:pixelated}
       #coop-panel .hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:calc(var(--px) * 3)}
       #coop-panel .key{display:flex;align-items:center;gap:calc(var(--px) * 2);background:none;border:0;padding:0;cursor:pointer}
@@ -254,10 +261,14 @@ const CoopUI = {
     btn.insertAdjacentHTML('beforeend', '<span class="dot"></span>');
     const back = document.createElement('div');
     back.id = 'menu-back';
+    // the crystal box sits above the pages and stays put while they flip
+    const wrap = document.createElement('div'); wrap.id = 'menu-wrap';
+    const gems = document.createElement('div'); gems.id = 'menu-gems';
     const panel = document.createElement('div');
     panel.id = 'coop-panel'; panel.tabIndex = -1;
-    document.body.append(btn, back, panel);
-    this.btn = btn; this.panel = panel; this.back = back;
+    wrap.append(gems, panel);
+    document.body.append(btn, back, wrap);
+    this.btn = btn; this.panel = panel; this.back = back; this.wrap = wrap; this.gems = gems;
     btn.onclick = () => this.toggle();
     back.onpointerdown = (e) => { e.preventDefault(); this.toggle(false); };
     const q = new URLSearchParams(location.search);
@@ -269,8 +280,8 @@ const CoopUI = {
   scale() {
     if (!this.panel) return;
     // as big as the window comfortably allows (whole pixels keep the font crisp)
-    const px = clamp(Math.min(Math.floor(innerWidth * 0.92 / 190), Math.floor(innerHeight * 0.9 / 150)), 2, 5);
-    this.panel.style.setProperty('--px', px + 'px');
+    const px = clamp(Math.min(Math.floor(innerWidth * 0.92 / 190), Math.floor(innerHeight * 0.9 / 190)), 2, 5);
+    this.wrap.style.setProperty('--px', px + 'px');
   },
   flip(d) { this.page = (this.page + d + 3) % 3; Sound.sfx('ui'); this.build(); },
   build() {
@@ -287,7 +298,7 @@ const CoopUI = {
       return b;
     };
     const title = document.createElement('div'); title.className = 'title';
-    title.appendChild(pxText(this.PAGES[this.page], '#f2f0e8', 2));
+    title.appendChild(pxIcon([G['p_down_' + Coop.myColor()], G.chestOpen, G.icon_gear][this.page], 2));
     const dots = document.createElement('div'); dots.className = 'dots';
     for (let k = 0; k < 3; k++) { const i = document.createElement('i'); if (k === this.page) i.className = 'on'; dots.appendChild(i); }
     title.appendChild(dots);
@@ -295,9 +306,17 @@ const CoopUI = {
     p.appendChild(hdr);
     p.appendChild(Object.assign(document.createElement('div'), { className: 'rule' }));
     [() => this.buildCharacter(p), () => this.buildCollectibles(p), () => this.buildSettings(p)][this.page]();
-    const foot = document.createElement('div'); foot.className = 'foot';
-    foot.appendChild(pxText('ESC TO CLOSE', '#9a9aa2'));
-    p.appendChild(foot);
+  },
+  buildGems() {
+    const box = this.gems;
+    box.innerHTML = '';
+    for (let k = 0; k < CRYSTAL_SLOTS; k++) {
+      const C = CRYSTALS[k], got = Combat.crystals.indexOf(k) >= 0;
+      const s = document.createElement('div'); s.className = 'gem' + (got ? '' : ' empty');
+      if (got) s.style.boxShadow = `inset 0 0 0 var(--px) ${C.col}, 0 0 calc(var(--px) * 4) ${C.col}88`;
+      s.appendChild(pxIcon((C || CRYSTALS[0]).g, 2));
+      box.appendChild(s);
+    }
   },
   label(p, text) { const d = document.createElement('div'); d.className = 'lbl'; d.appendChild(pxText(text, '#9a9aa2')); p.appendChild(d); return d; },
   button(text, cls, fn) {
@@ -309,7 +328,6 @@ const CoopUI = {
 
   // --- page 1: character ---------------------------------------------------------------
   buildCharacter(p) {
-    this.label(p, 'CHOOSE A LOOK');
     const grid = document.createElement('div'); grid.className = 'slots';
     const c = Coop.myColor();
     CHARS.forEach((n, i) => {
@@ -319,7 +337,7 @@ const CoopUI = {
       grid.appendChild(s);
     });
     p.appendChild(grid);
-    this.label(p, 'SCARF COLOUR');
+    p.appendChild(Object.assign(document.createElement('div'), { className: 'rule' }));
     const sw = document.createElement('div'); sw.className = 'sw';
     SCARVES.forEach((col, k) => {
       const sp = document.createElement('span'); sp.style.background = col;
@@ -339,38 +357,29 @@ const CoopUI = {
 
   // --- page 2: collectibles --------------------------------------------------------------
   buildCollectibles(p) {
-    const info = document.createElement('div'); info.className = 'info';
-    const say = (a, b, col) => { info.innerHTML = ''; info.appendChild(pxText(a, col || '#f2f0e8')); if (b) info.appendChild(pxText(b, '#9a9aa2')); };
-    let selEl = null;
-    const slot = (row, g, on, a, b, col) => {
+    // no words here: each thing sits in a frame of its own colour, dimmed until you have it
+    const row = () => { const r = document.createElement('div'); r.className = 'slots'; p.appendChild(r); return r; };
+    const gap = () => p.appendChild(Object.assign(document.createElement('div'), { className: 'rule' }));
+    const slot = (r, g, on, col) => {
       const s = document.createElement('div'); s.className = 'slot' + (on ? ' on' : ' empty');
-      s.appendChild(pxIcon(g, 1));
-      const show = () => { if (selEl) selEl.classList.remove('sel'); selEl = s; s.classList.add('sel'); say(a, b, col); };
-      s.onmouseenter = s.onclick = show;
-      row.appendChild(s);
+      if (on && col) s.style.boxShadow = `inset 0 0 0 var(--px) ${col}`;
+      s.appendChild(pxIcon(g, 2));
+      r.appendChild(s);
       return s;
     };
-    const row = (text) => { this.label(p, text); const r = document.createElement('div'); r.className = 'slots'; p.appendChild(r); return r; };
-    const r1 = row('CRYSTALS ' + Combat.crystals.length + '/' + CRYSTAL_SLOTS);
-    for (let k = 0; k < CRYSTAL_SLOTS; k++) {
-      const C = CRYSTALS[k], got = Combat.crystals.indexOf(k) >= 0;
-      slot(r1, C ? C.g : CRYSTALS[0].g, got, got ? C.name : '???', got ? C.effect : 'DEFEAT A WORLD BOSS', got ? C.col : '#9a9aa2');
-    }
-    const r2 = row('SPECIALS');
-    for (const k in SPECIALS) {
-      const S = SPECIALS[k], got = Combat.specials.indexOf(k) >= 0;
-      slot(r2, G[S.icon], got, got ? S.name : '???', got ? 'HOLD SPACE TO CHANNEL, E TO SWITCH' : 'TRADE 5 WEAPONS TO LEARN');
-    }
-    const r3 = row('ITEMS');
-    slot(r3, G.icon_map, true, 'WORLD MAP', 'PRESS M TO OPEN', '#e8d8b8');
-    slot(r3, G.key, Combat.keys > 0, 'KEYS X' + Combat.keys, 'OPEN LOCKED DOORS - ARENAS TAKE 2', '#f0b030');
-    const r4 = row('WEAPONS ' + Combat.inv.length);
+    const r1 = row();
+    for (const k in SPECIALS) slot(r1, G[SPECIALS[k].icon], Combat.specials.indexOf(k) >= 0, SPECIALS[k].glow || '#9ad8ff');
+    gap();
+    const r2 = row();
+    slot(r2, G.icon_map, true, '#e8d8b8').appendChild(Object.assign(pxText('M', '#f0b030'), { style: 'margin:calc(var(--px) * 2) auto 0;width:calc(var(--px) * 3);height:calc(var(--px) * 5)' }));
+    const keys = slot(r2, G.key, Combat.keys > 0, '#f0b030');
+    if (Combat.keys) keys.appendChild(Object.assign(pxText(String(Combat.keys), '#f0b030'), { style: `margin:calc(var(--px) * 2) auto 0;width:calc(var(--px) * ${String(Combat.keys).length * 4 - 1});height:calc(var(--px) * 5)` }));
+    gap();
+    const r3 = row();
     Combat.inv.forEach((id, i) => {
-      const it = ITEMS[id];
-      slot(r4, G['item_' + id], true, it.name + (i === Combat.eq ? ' - HELD' : ''), it.kind + ' - ' + it.el + ' - Q TO SWAP', ELEMENTS[it.el].col);
+      const s = slot(r3, G['item_' + id], true, ELEMENTS[ITEMS[id].el].col);
+      if (i === Combat.eq) s.style.background = '#2a2410';
     });
-    p.appendChild(info);
-    say('LEVEL ' + Combat.level(), 'HOVER OVER AN ITEM TO READ IT');
   },
 
   // --- page 3: settings and co-op ------------------------------------------------------
@@ -424,9 +433,9 @@ const CoopUI = {
     const p = this.panel;
     if (!p) return;
     if (open === undefined) open = !p.classList.contains('open');
-    p.classList.toggle('open', open); this.back.classList.toggle('open', open);
+    p.classList.toggle('open', open); this.wrap.classList.toggle('open', open); this.back.classList.toggle('open', open);
     Sound.sfx('ui');
-    if (open) { this.page = 1; this.scale(); this.build(); p.focus(); } else document.getElementById('cvs').focus();
+    if (open) { this.page = 1; this.scale(); this.buildGems(); this.build(); p.focus(); } else document.getElementById('cvs').focus();
   },
   isOpen() { return !!(this.panel && this.panel.classList.contains('open')); },
   // start over: forget items, XP, keys, specials, beaten bosses and unlocked doors

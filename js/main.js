@@ -127,11 +127,17 @@ function enterInterior(ent) {
     snapCamera(); game.irisT = game.time;
   });
 }
-function exitInterior() {
+// how = the exit you took: a golden ladder goes all the way up, a shaft of
+// daylight comes out on a far-off road; anything else goes up one level
+function exitInterior(how) {
   Sound.sfx('exit');
   Powers.endPossess(true);
   fadeTo(() => {
-    const back = game.stack.pop() || { map: game.world.map, x: game.world.start.x, y: game.world.start.y, ent: null };
+    let back;
+    if (how && how.warp) { back = { map: game.world.map, x: how.warp.x, y: how.warp.y, ent: null }; game.stack = []; MapView.reveal(how.warp.x, how.warp.y, 13); }
+    else if (how && how.surface) { back = game.stack[0]; game.stack = []; }
+    else back = game.stack.pop();
+    back = back || { map: game.world.map, x: game.world.start.x, y: game.world.start.y, ent: null };
     Combat.carryPets(game.map, back.map, back.x, back.y);
     game.map = back.map; game.ret = back.ent;
     game.lockUntil = back.map === game.world.map ? 0 : game.time + 2 + 1 / game.fadeSpeed;
@@ -218,7 +224,7 @@ function update(dt) {
   if (arrived) {
     if (m === game.world.map) MapView.reveal(p.x, p.y, 13);
     const e = m.entr.get(p.y * m.w + p.x);
-    if (e) { if (e.exit) exitInterior(); else enterInterior(e); }
+    if (e) { if (e.exit) exitInterior(e); else enterInterior(e); }
     if ((m.glyph[p.y * m.w + p.x] & 0x7fff) === G.key) { Combat.clearCell(m, p.x, p.y); Combat.addKey(1); }
     Sound.stepSound(m === game.world.map ? m.biome[p.y * m.w + p.x] : -1);
     for (let k = 0; k < 2; k++) spawnParticle('step', p.x * TS + 2 + Math.random() * 4, p.y * TS + 7, (Math.random() - 0.5) * 6, -2 - Math.random() * 3, 0.35);

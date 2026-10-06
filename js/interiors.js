@@ -6,6 +6,16 @@
 // ---------------------------------------------------------------------------
 
 const EXIT = { exit: true };
+// the golden ladder in a trophy room climbs straight back to the surface
+const EXIT_SURFACE = { exit: true, surface: true };
+
+variant('stairsGold', 'stairsDown', ['#ffd84a'], { light: { c: '#ffc040', r: 30, i: 0.9, f: 0.1, ox: 4, oy: 4 } });
+variant('ladderGold', 'ladder', ['#ffd84a'], { light: { c: '#ffd060', r: 40, i: 1.1, f: 0.1, ox: 4, oy: 4 } });
+// a shaft of daylight: a rare way out that comes up somewhere else entirely
+defGlyph('caveLight', [
+  ['.1.11.1.', '11111111', '12222221', '12222221', '.122221.', '.122221.', '..1221..', '...11...'],
+  ['1.11.1.1', '11111111', '12222221', '12222221', '.122221.', '.122221.', '..1221..', '...11...'],
+], ['#8ad8ff', '#ffffff'], { anim: 2, emit: true, light: { c: '#cfefff', r: 44, i: 1.1, f: 0.15, ox: 4, oy: 4 } });
 
 // Interiors that keep going down: each level has a glowing stairway to the
 // next, up to DEEP_MAX levels below the surface.
@@ -26,12 +36,14 @@ function genInterior(ent) {
     case 'firetemple': case 'worldtree': case 'wreck': case 'witch':
       m = genRoom(seed, ent.type); break;
     case 'arena': m = genArena(seed, ent); break;
+    case 'trophy': m = genTrophy(seed, ent); break;
     default: m = genCave(seed, false, null, depth);
   }
   markWalls(m);
-  if (ent.type !== 'arena') applyDream(m, ent, seed);
+  const plain = ent.type === 'arena' || ent.type === 'trophy'; // these keep their own look
+  if (!plain) applyDream(m, ent, seed);
   seedInteriorOrb(m, m.dream.name, seed);
-  if (ent.type !== 'arena') seedInteriorItems(m, ent, seed);
+  if (ent.type !== 'arena') seedInteriorItems(m, ent.type === 'trophy' ? { type: ent.parent } : ent, seed);
   if (HOMEY[ent.type]) {
     // homes are safe: no enemies, and about half have a special trader
     m.creatures = m.creatures.filter((c) => !ENEMY_DEF[GLYPHS[c.g].name]);
@@ -39,8 +51,10 @@ function genInterior(ent) {
   }
   Combat.number(m);
   m.finalize();
-  if (depth) m.ambient = m.ambient.map((a) => a * Math.pow(0.8, depth));
-  if (DEEP[ent.type] && depth < DEEP_MAX) addStairsDown(m, ent, depth, seed);
+  if (depth && !plain) m.ambient = m.ambient.map((a) => a * Math.pow(0.8, depth));
+  // every level leads on: down a stairway, and from the deepest one into a trophy room
+  if (DEEP[ent.type]) addStairsDown(m, ent, depth, seed, depth >= DEEP_MAX);
+  if (DEEP[ent.type] && hash2(String(ent.id).length * 97 + depth, 61, ent.seed) < 0.1) addCaveExit(m, ent, seed);
   return m;
 }
 
@@ -75,7 +89,7 @@ function addTrader(m, seed) {
   m.solid[i] = 1;
 }
 
-function addStairsDown(m, ent, depth, seed) {
+function addStairsDown(m, ent, depth, seed, trophy) {
   const R = mulberry32(seed + 5);
   const d = bfsFrom(m, m.spawn.x, m.spawn.y);
   let max = 0;
@@ -84,11 +98,71 @@ function addStairsDown(m, ent, depth, seed) {
   for (let i = 0; i < d.length; i++) if (d[i] > max * 0.55 && !m.glyph[i] && !m.solid[i] && !m.entr.has(i)) cand.push(i);
   if (!cand.length) return;
   const i = cand[Math.floor(R() * cand.length)];
-  m.glyph[i] = G.stairsDown;
-  m.entr.set(i, { id: ent.id + '>' + (depth + 1), type: ent.type, seed: ent.seed, depth: depth + 1, locked: hash2(depth, 3, seed) < 0.4 });
   const x = i % m.w, y = (i / m.w) | 0;
-  m.chunks[((y / CH) | 0) * m.cw + ((x / CH) | 0)].emit.push(i);
-  m.cache.clear();
+  if (trophy) m.entr.set(i, { id: ent.id + '>T', type: 'trophy', parent: ent.type, seed: ent.seed, depth: depth + 1 });
+  else m.entr.set(i, { id: ent.id + '>' + (depth + 1), type: ent.type, seed: ent.seed, depth: depth + 1, locked: hash2(depth, 3, seed) < 0.4 });
+  Combat.placeLive(m, x, y, trophy ? 'stairsGold' : 'stairsDown');
+}
+
+// A rare shaft of daylight: leaving through it brings you up on a road in a
+// different biome, far from where you went in.
+function addCaveExit(m, ent, seed) {
+  const R = mulberry32(seed ^ 0x6c8e9cf5), W = m.w, cand = [];
+  const d = bfsFrom(m, m.spawn.x, m.spawn.y);
+  for (let i = W; i < d.length - W; i++) {
+    if (d[i] < 8 || m.solid[i] || m.glyph[i] || m.entr.has(i) || m.water[i]) continue;
+    if (m.solid[i - W] && !m.water[i - W]) cand.push(i);
+  }
+  if (!cand.length || !game.world) return;
+  const w = game.world.map, from = ent.ret || game.stack[0] || game.world.start;
+  const fromB = w.biome[from.y * w.w + from.x];
+  let warp = null;
+  for (let t = 0; t < 4000 && !warp; t++) {
+    const x = 2 + Math.floor(R() * (w.w - 4)), y = 2 + Math.floor(R() * (w.h - 4)), j = y * w.w + x;
+    if (!w.road[j] || (w.road[j] & R_DOT) || w.solid[j] || w.water[j] || w.entr.has(j)) continue;
+    if (w.biome[j] === fromB || Math.abs(x - from.x) + Math.abs(y - from.y) < 120) continue;
+    warp = { x, y };
+  }
+  if (!warp) return;
+  const i = cand[Math.floor(R() * cand.length)];
+  m.entr.set(i, { exit: true, warp });
+  Combat.placeLive(m, i % W, (i / W) | 0, 'caveLight');
+  const ck = m.chunks[((((i / W) | 0) / CH) | 0) * m.cw + (((i % W) / CH) | 0)];
+  ck.emit = ck.emit.filter((k) => k !== i); ck.anim.push(i); // animated, so it is drawn each frame instead
+}
+
+// The end of a deep dungeon: a gilded hall of chests, pedestals, keys and an
+// orb, with the way you came in and a golden ladder straight to the surface.
+function genTrophy(seed, ent) {
+  const W = 25, H = 19, R = mulberry32(seed ^ 0x7a0f11e5);
+  const m = new TileMap(W, H, { kind: 'interior', voidColor: '#000000', bgPal: ['#3a2a10', '#2e2008', '#140e06', '#5a4214'], ambient: [0.62, 0.55, 0.42] });
+  const floor = new Uint8Array(W * H), cx = W >> 1;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x, f = x >= 1 && x < W - 1 && y >= 2 && y < H - 1;
+    floor[i] = f ? 1 : 0;
+    if (f) { m.bg[i] = Math.abs(x - cx) <= 1 ? 3 : (x + y) % 2; continue; }
+    m.solid[i] = 1; m.bg[i] = 2;
+    if (wallEdge(floor, W, H, x, y) || floor[i + W] || floor[i + 2 * W]) m.glyph[i] = G.wallStone;
+  }
+  // in by a plain ladder at the bottom, out by the golden one at the top
+  const di = (H - 1) * W + cx;
+  m.glyph[di] = G.ladder; m.solid[di] = 0; m.entr.set(di, EXIT);
+  m.spawn = { x: cx, y: H - 2 };
+  const ti = W + cx;
+  m.glyph[ti] = G.ladderGold; m.solid[ti] = 0; m.entr.set(ti, EXIT_SURFACE);
+  const put = (x, y, name, sol) => { const i = y * W + x; m.glyph[i] = G[name]; m.solid[i] = sol ? 1 : 0; };
+  for (const x of [3, 7, W - 8, W - 4]) put(x, 1, 'banner', 1);
+  for (const x of [2, 9, W - 10, W - 3]) put(x, 1, 'torch', 1);
+  for (const [x, y] of [[2, 3], [W - 3, 3], [2, H - 3], [W - 3, H - 3]]) put(x, y, 'brazier', 1);
+  for (let y = 5; y < H - 3; y += 4) { put(5, y, 'pillar', 1); put(W - 6, y, 'pillar', 1); }
+  for (const [x, y] of [[cx - 4, 5], [cx + 4, 5], [cx - 4, 10], [cx + 4, 10]]) put(x, y, 'chest', 1);
+  put(cx - 2, 7, 'key', 0); put(cx + 2, 7, 'key', 0);
+  m.items = [];
+  const tags = [ent.parent || 'dungeon', 'cave'];
+  for (const [x, y] of [[cx - 7, 8], [cx + 7, 8]]) { put(x, y, 'pedestal', 0); m.items.push({ x, y, id: pickItem(tags, R()) }); }
+  m.dream = { name: 'trophy', parts: ['gold'], fx: {}, light: 0.8 };
+  m.finalize();
+  return m;
 }
 
 // After decorating, make sure every floor cell is reachable from the spawn by

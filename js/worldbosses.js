@@ -132,11 +132,11 @@ bigBoss('w_trash', ['#0e0e14', '#3a3a4a', '#24242e', '#5a5a6a', '#f0c030', '#801
 
 // --- crystals ------------------------------------------------------------------------
 const CRYSTALS = [
-  { name: 'GRAVE CRYSTAL', effect: 'HEALTH REGROWS FAST', col: '#7aff6a', hi: '#e0ffd8' },
-  { name: 'PRISM CRYSTAL', effect: 'SPECIALS CHARGE FASTER', col: '#c08aff', hi: '#f4e8ff' },
-  { name: 'FROST CRYSTAL', effect: '+4 MAX HEALTH', col: '#4ae8f0', hi: '#e8ffff' },
-  { name: 'EMBER CRYSTAL', effect: '+25% DAMAGE', col: '#ff7a2a', hi: '#ffe0a0' },
-  { name: 'CHROME CRYSTAL', effect: 'MOVE AND ATTACK FASTER', col: '#f0c040', hi: '#fff4c0' },
+  { name: 'GRAVE CRYSTAL', col: '#7aff6a', hi: '#e0ffd8' },
+  { name: 'PRISM CRYSTAL', col: '#c08aff', hi: '#f4e8ff' },
+  { name: 'FROST CRYSTAL', col: '#4ae8f0', hi: '#e8ffff' },
+  { name: 'EMBER CRYSTAL', col: '#ff7a2a', hi: '#ffe0a0' },
+  { name: 'CHROME CRYSTAL', col: '#f0c040', hi: '#fff4c0' },
 ];
 const CRYSTAL_SLOTS = 7;
 CRYSTALS.forEach((c, i) => {
@@ -195,7 +195,7 @@ const WorldBosses = {
       return;
     }
     const enraged = c.hp < c.maxhp * 0.5;
-    if (enraged && !c.enraged) { c.enraged = true; Combat.say(B.name + ' IS ENRAGED'); Powers.rings.push({ x: cx, y: cy, r: 6, vr: 140, life: 0.7, max: 0.7, k: 'ember' }); Powers.shake = 3; }
+    if (enraged && !c.enraged) { c.enraged = true; Powers.rings.push({ x: cx, y: cy, r: 6, vr: 140, life: 0.7, max: 0.7, k: 'ember' }); Powers.shake = 3; }
     if (c.q && c.q.length) return;
     c.atkCd -= dt * (enraged ? 1.35 : 1);
     if (c.atkCd > 0) return;
@@ -339,7 +339,7 @@ const WorldBosses = {
     const C = CRYSTALS[k];
     if (Combat.crystals.indexOf(k) < 0) Combat.crystals.push(k);
     Combat.hp = Combat.maxHp(); Combat.showHearts();
-    Combat.say(C.name + ' - ' + C.effect, C.g);
+    Combat.say('', C.g);
     const p = game.player;
     Powers.rings.push({ x: p.px + 4, y: p.py + 4, r: 2, vr: 110, life: 0.8, max: 0.8, k: 'prism' });
     for (let n = 0; n < 40; n++) { const a = Math.random() * Math.PI * 2; spawnParticle('beamSpark', p.px + 4, p.py + 4, Math.cos(a) * 80, Math.sin(a) * 80, 0.7, n % 2 ? C.col : '#ffffff'); }
@@ -351,7 +351,6 @@ const WorldBosses = {
     Combat.worldDown.add(B.i);
     for (const q of m.creatures) if (q.minion && !q.dead) Combat.kill(q);
     this.marks.length = 0;
-    Combat.say(B.name + ' DEFEATED');
     this.drops.push({ x: c.px + 4, y: c.py + 4, k: B.i, map: m, t: 0 });
     m.items = m.items || [];
     const spot = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dy]) => !m.blocked(c.x + dx, c.y + dy));

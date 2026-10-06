@@ -60,6 +60,7 @@ defGlyph('pedestal', ['........', '........', '.111111.', '..1111..', '..1221..'
 defGlyph('chestOpen', ['11111111', '1......1', '........', '22222222', '11133111', '11111111', '11111111', '........'], [P.gold, P.goldD, P.white]);
 defGlyph('emoteBang', ['...11...', '...11...', '...11...', '...11...', '...11...', '........', '...11...', '........'], ['#ffe84a'], { emit: true });
 defGlyph('lockIcon', ['..111...', '.1...1..', '.1...1..', '1111111.', '1112111.', '1112111.', '1111111.', '........'], [P.gold, '#3a2408'], { emit: [1] });
+defGlyph('icon_up', ['...1....', '..111...', '.11111..', '1111111.', '..111...', '..111...', '..111...', '........'], ['#ffe84a'], { emit: true });
 defGlyph('icon_beam', ['........', '1.......', '.1......', '..111111', '.1......', '1.......', '........', '........'], ['#9ad8ff'], { emit: true });
 defGlyph('icon_vortex', ['..1111..', '.1....1.', '1..11..1', '1.1..1.1', '1.1.11.1', '1..1...1', '.1....1.', '..111...'], ['#c08aff'], { emit: true });
 defGlyph('icon_shadow', ['....11..', '...1111.', '1..1111.', '.1..11..', '1..1111.', '.1.1111.', '1...11..', '...1..1.'], ['#9a7ae8'], { emit: true });
@@ -128,15 +129,12 @@ const Combat = {
   item() { return ITEMS[this.inv[this.eq]] || ITEMS.sling; },
   level() { return Math.floor(Math.sqrt(this.xp / 6)) + 1; },
   levelXp(l) { return (l - 1) * (l - 1) * 6; },
-  power() { return (1 + (this.level() - 1) * 0.12) * (this.has(3) ? 1.25 : 1); },
-  // crystals from world bosses (see CRYSTALS in js/worldbosses.js)
-  has(k) { return this.crystals.indexOf(k) >= 0; },
-  speedK() { return this.has(4) ? 1.15 : 1; },
-  chargeK() { return this.has(1) ? 1.4 : 1; },
-  say(text, icon) { this.toast = { text, icon, life: 2.2 }; },
+  power() { return 1 + (this.level() - 1) * 0.12; },
+  // pop-ups are icons, with at most a number beside them (no words)
+  say(text, icon) { this.toast = { text: text || '', icon, life: 2.2 }; },
   showHearts() { this.heartsT = 2.6; },
 
-  maxHp() { return 8 + (this.level() - 1) * 2 + (this.has(2) ? 4 : 0); },
+  maxHp() { return 8 + (this.level() - 1) * 2; },
   ensure(c) {
     if (c.maxhp !== undefined) return;
     const def = ENEMY_DEF[baseName(c)];
@@ -168,7 +166,7 @@ const Combat = {
     }
     const a = aim ? Math.atan2(aim.y - y0, aim.x - x0) : { up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0 }[p.face];
     if (!p.moving) p.face = Math.abs(Math.cos(a)) > Math.abs(Math.sin(a)) ? (Math.cos(a) > 0 ? 'right' : 'left') : (Math.sin(a) > 0 ? 'down' : 'up');
-    this.cd = it.cd * (this.has(4) ? 0.85 : 1);
+    this.cd = it.cd;
     this.fire(it, x0, y0, a, aim, 'player');
     this.atkEvt = { s: this.seq++, id: this.inv[this.eq], a: Math.round(a * 100) / 100, d: aim ? Math.round(Math.hypot(aim.x - x0, aim.y - y0)) : 56 };
   },
@@ -321,7 +319,6 @@ const Combat = {
     for (let n = 0; n < 40; n++) spawnParticle('beamSpark', p.px + 4, p.py + 4, (Math.random() - 0.5) * 120, (Math.random() - 0.5) * 120, 0.8, n % 2 ? '#ffffff' : '#ff5a50');
     Powers.rings.push({ x: p.px + 4, y: p.py + 4, r: 2, vr: 60, life: 0.8, max: 0.8, k: 'ember' });
     Sound.sfx('die');
-    this.say('KNOCKED OUT');
     setTimeout(() => fadeTo(() => {
       // wake up back in the starting village with full health
       Combat.carryPets(game.map, game.world.map, game.world.start.x, game.world.start.y);
@@ -335,7 +332,7 @@ const Combat = {
     const before = this.level();
     this.xp += v;
     if (this.level() > before) {
-      this.say('LEVEL ' + this.level());
+      this.say(String(this.level()), G.icon_up);
       const p = game.player;
       Powers.rings.push({ x: p.px + 4, y: p.py + 4, r: 2, vr: 90, life: 0.6, max: 0.6, k: 'prism' });
       Sound.sfx('levelup');
@@ -349,7 +346,7 @@ const Combat = {
     let k = this.inv.indexOf(id);
     if (k < 0) { this.inv.push(id); k = this.inv.length - 1; }
     this.eq = k;
-    this.say(ITEMS[id].name, G['item_' + id]);
+    this.say('', G['item_' + id]);
     const p = game.player;
     Powers.rings.push({ x: p.px + 4, y: p.py + 4, r: 2, vr: 70, life: 0.5, max: 0.5, k: ITEMS[id].el });
     Sound.sfx('absorb', 523);
@@ -374,32 +371,32 @@ const Combat = {
   isLocked(e) { return !!(e && e.locked && !this.unlocked.has(String(e.id))); },
   addKey(n) {
     this.keys += n; this.save();
-    this.say('KEY X' + this.keys, G.key); Sound.sfx('key');
+    this.say(String(this.keys), G.key); Sound.sfx('key');
   },
   tryUnlock(e, x, y) {
     const need = e.keyCost || 1;
     if (this.keys >= need) {
       this.keys -= need; this.unlocked.add(String(e.id)); this.save();
-      this.say('UNLOCKED', G.lockIcon); Sound.sfx('unlock');
+      this.say('', G.lockIcon); Sound.sfx('unlock');
       for (let n = 0; n < 14; n++) spawnParticle('beamSpark', x * TS + 4, y * TS + 4, (Math.random() - 0.5) * 70, (Math.random() - 0.5) * 70, 0.5, n % 2 ? '#f0c030' : '#ffffff');
       return true;
     }
     if (!this.lockedSaid || game.time - this.lockedSaid > 1) {
       this.lockedSaid = game.time; Sound.sfx('locked');
-      this.say(need > 1 ? 'ARENA - NEEDS ' + need + ' KEYS ' + this.keys + '/' + need : 'LOCKED - FIND A KEY', need > 1 ? G.key : G.lockIcon);
+      this.say(need > 1 ? this.keys + '/' + need : '', need > 1 ? G.key : G.lockIcon);
     }
     return false;
   },
   cycle(dir) {
-    if (this.inv.length < 2) { this.say(this.item().name, G['item_' + this.inv[this.eq]]); return; }
+    if (this.inv.length < 2) { this.say('', G['item_' + this.inv[this.eq]]); return; }
     this.eq = (this.eq + dir + this.inv.length) % this.inv.length;
-    this.say(this.item().name, G['item_' + this.inv[this.eq]]); Sound.sfx('ui'); this.save();
+    this.say('', G['item_' + this.inv[this.eq]]); Sound.sfx('ui'); this.save();
   },
   cycleAbility() {
     if (Powers.charging) return;
     this.ability = (this.ability + 1) % this.specials.length;
     const S = SPECIALS[this.special()];
-    this.say(this.specials.length > 1 ? S.name : S.name + ' - TRADE FOR MORE', G[S.icon]); Sound.sfx('ui'); this.save();
+    this.say('', G[S.icon]); Sound.sfx('ui'); this.save();
   },
   // --- the special trader: five weapons for one special you don't know yet -------------
   tryTalk(x, y) {
@@ -407,7 +404,7 @@ const Combat = {
     if (!c || game.time - this.talkT < 1.2) return !!c;
     this.talkT = game.time; c.emote = 0; c.talk = 1.5;
     const missing = Object.keys(SPECIALS).filter((k) => this.specials.indexOf(k) < 0);
-    if (!missing.length) { this.say('I HAVE TAUGHT YOU ALL I KNOW'); Sound.sfx('ui'); return true; }
+    if (!missing.length) { Sound.sfx('ui'); return true; }
     if (this.inv.length < 5) { this.say(this.inv.length + '/5', G.item_rustySword); Sound.sfx('locked'); return true; }
     const take = shuffle(this.inv.slice(), Math.random).slice(0, 5);
     this.inv = this.inv.filter((id) => take.indexOf(id) < 0);
@@ -415,7 +412,7 @@ const Combat = {
     this.eq = 0;
     const k = missing[Math.floor(Math.random() * missing.length)];
     this.specials.push(k); this.ability = this.specials.length - 1;
-    this.say('LEARNED ' + SPECIALS[k].name, G[SPECIALS[k].icon]);
+    this.say('', G[SPECIALS[k].icon]);
     const p = game.player;
     for (const id of take) {
       for (let n = 0; n < 4; n++) spawnParticle('beamSpark', p.px + 4, p.py + 4, (c.px - p.px) * 2 + (Math.random() - 0.5) * 30, (c.py - p.py) * 2 + (Math.random() - 0.5) * 30, 0.5, ELEMENTS[ITEMS[id].el].col);
@@ -446,9 +443,9 @@ const Combat = {
     this.invT = Math.max(0, this.invT - dt);
     if (p.hitT > 0) p.hitT -= dt;
     this.auth = this.amAuth();
-    if (this.hp < this.maxHp() && this.deathT <= 0 && game.time - this.lastHurt > (this.has(0) ? 3 : 6)) {
+    if (this.hp < this.maxHp() && this.deathT <= 0 && game.time - this.lastHurt > 6) {
       this.regenT -= dt;
-      if (this.regenT <= 0) { this.regenT = this.has(0) ? 1.4 : 3.5; this.hp = Math.min(this.maxHp(), this.hp + 1); this.showHearts(); }
+      if (this.regenT <= 0) { this.regenT = 3.5; this.hp = Math.min(this.maxHp(), this.hp + 1); this.showHearts(); }
     }
     if (this.toast && (this.toast.life -= dt) <= 0) this.toast = null;
     // creatures: befriending, pets, enemies
@@ -900,10 +897,8 @@ const Combat = {
     const boss = game.map && game.map.creatures.find((c) => c.boss && !c.dead && Math.abs(c.x - p.x) + Math.abs(c.y - p.y) < 22);
     if (boss && boss.maxhp) {
       const w = Math.min(160, Math.round(VW * 0.6)), x = Math.round(VW / 2 - w / 2), y = Math.round(VH) - 14, f = clamp(boss.hp / boss.maxhp, 0, 1);
-      const name = boss.boss.name;
-      S.globalAlpha = 0.75; S.fillStyle = '#0b0b10'; S.fillRect(x - 3, y - 9, w + 6, 16); S.globalAlpha = 1;
-      drawText(S, name, Math.round(VW / 2 - name.length * 2), y - 7, boss.enraged ? '#ff6a5a' : '#f2f0e8');
-      S.fillStyle = '#3a1a20'; S.fillRect(x, y, w, 3);
+      S.globalAlpha = 0.75; S.fillStyle = '#0b0b10'; S.fillRect(x - 3, y - 3, w + 6, 9); S.globalAlpha = 1;
+      S.fillStyle = boss.enraged ? '#5a1010' : '#3a1a20'; S.fillRect(x, y, w, 3);
       S.fillStyle = boss.flash > 0 ? '#ffffff' : '#ff3a3a'; S.fillRect(x, y, Math.ceil(w * f), 3);
     }
     // nothing permanent on screen: health appears when it changes, names when you switch or pick up
@@ -925,7 +920,7 @@ const Combat = {
       S.globalAlpha = 1;
     }
     if (this.toast) {
-      const s = this.toast.text, icon = this.toast.icon, w = s.length * 4 + (icon ? 11 : 0);
+      const s = this.toast.text, icon = this.toast.icon, w = Math.max(0, s.length * 4 - 1) + (icon ? 8 + (s ? 3 : 0) : 0);
       const x = Math.round(VW / 2 - w / 2), y = 20;
       S.globalAlpha = Math.min(1, this.toast.life * 2);
       S.fillStyle = '#0b0b10'; S.fillRect(x - 4, y - 3, w + 7, icon ? 14 : 11);

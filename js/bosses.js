@@ -141,7 +141,7 @@ const Bosses = {
       }
       if (!tgt) continue;
       const enraged = c.hp < c.maxhp * 0.5;
-      if (enraged && !c.enraged) { c.enraged = true; Combat.say(B.name + ' IS ENRAGED'); Powers.rings.push({ x: cx, y: cy, r: 4, vr: 120, life: 0.6, max: 0.6, k: 'ember' }); }
+      if (enraged && !c.enraged) { c.enraged = true; Powers.rings.push({ x: cx, y: cy, r: 4, vr: 120, life: 0.6, max: 0.6, k: 'ember' }); }
       c.atkCd -= dt * (enraged ? 1.5 : 1);
       if (c.atkCd > 0) continue;
       const move = B.moves[c.mi++ % B.moves.length];
@@ -229,7 +229,6 @@ const Bosses = {
     const m = game.map, B = c.boss;
     if (game.ret) Combat.bossDown.add(String(game.ret.id));
     for (const q of m.creatures) if (q.minion && !q.dead) Combat.kill(q);
-    Combat.say(B.name + ' DEFEATED');
     Combat.hp = Combat.maxHp(); Combat.showHearts();
     m.items = m.items || [];
     m.items.push({ x: c.x, y: c.y, id: pickItem([], Math.random()), pop: 0.8 });

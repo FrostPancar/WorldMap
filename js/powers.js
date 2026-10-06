@@ -189,7 +189,7 @@ const Powers = {
     best.moving = false;
     const dur = 4 + c * 8;
     this.possess = { c: best, t: dur, max: dur, k: c, map: m, ox: best.x, oy: best.y };
-    Combat.say('POSSESSED ' + (Combat.isEnemy(best) ? 'FOE' : 'ANIMAL'), G.icon_shadow);
+    Combat.say('', G.icon_shadow);
   },
   endPossess(quiet) {
     const P = this.possess;
@@ -344,7 +344,7 @@ const Powers = {
     const p = game.player, m = game.map;
     if (this.charging) {
       if (!this.canAct()) { this.charging = false; Sound.chargeStop(); }
-      this.charge = Math.min(1, this.charge + dt * Combat.chargeK() / SPECIALS[this.special()].time);
+      this.charge = Math.min(1, this.charge + dt / SPECIALS[this.special()].time);
       Sound.chargeLevel(this.charge);
       this.spawnChargeArcs(p, this.charge, this.chargeKind(), dt);
       if (this.charge >= 1) {
@@ -507,7 +507,7 @@ function seedOverworldOrbs(world, seed) {
 function seedInteriorOrb(m, theme, seed) {
   const R = mulberry32(seed ^ 0x7f4a7c15);
   m.pickups = [];
-  if (R() > 0.6) return;
+  if (R() > 0.6 && theme !== 'trophy') return; // trophy rooms always hold one
   const d = bfsFrom(m, m.spawn.x, m.spawn.y);
   let max = 0;
   for (const v of d) if (v > max) max = v;

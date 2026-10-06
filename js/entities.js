@@ -67,7 +67,7 @@ class Player {
   // returns true when the player arrived on a new tile this frame
   update(dt, m, dir, run) {
     let arrived = false;
-    const speed = (run ? 11 : 6.5) * Combat.speedK();
+    const speed = run ? 11 : 6.5;
     if (this.moving) {
       this.t += dt * speed;
       this.animT += dt;
