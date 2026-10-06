@@ -205,6 +205,7 @@ function update(dt) {
   let dir = game.pending ? null : input.dir();
   // rooted while charging: direction keys only turn you to aim the beam
   if (Powers.charging) { if (dir && !p.moving) p.face = dir; dir = null; }
+  if (WorldBosses.anim) dir = null; // claiming a crystal: hold still for the moment
   if (dir && m !== game.world.map && game.time < (game.lockUntil || 0)) {
     // for the first seconds in a space its exits stay shut
     const [dx, dy] = DIRS[dir];
@@ -473,10 +474,10 @@ function renderWorld(S, L, E, P) {
   // adds light backs off as the room's ambient and its floor get brighter.
   let glowK = 1;
   if (!over) {
-    const ambAvg = (amb[0] + amb[1] + amb[2]) / 3, lum = floorLum(m), brightK = clamp(1.5 - lum * 1.9, 0.25, 1);
-    glowK = clamp(1.35 - ambAvg * 1.35, 0.3, 1) * brightK;
-    if (lum > 0.4) amb = amb.map((a) => a * lerp(1, 0.75, clamp((lum - 0.4) / 0.4, 0, 1)));
-    P.bloom *= brightK; P.haze *= brightK; P.threshold = Math.min(0.95, P.threshold + (1 - brightK) * 0.4);
+    const ambAvg = (amb[0] + amb[1] + amb[2]) / 3, lum = floorLum(m), brightK = clamp(1.3 - lum * 1.1, 0.55, 1);
+    glowK = clamp(1.25 - ambAvg * 0.9, 0.6, 1) * brightK;
+    if (lum > 0.5) amb = amb.map((a) => a * lerp(1, 0.9, clamp((lum - 0.5) / 0.3, 0, 1)));
+    P.bloom *= brightK; P.haze *= brightK; P.threshold = Math.min(0.9, P.threshold + (1 - brightK) * 0.3);
     P.amb = amb;
   }
   lightK *= glowK;

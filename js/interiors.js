@@ -262,7 +262,7 @@ function genCave(seed, ice, kind, depth) {
   const floor = caFloor(W, H, R, 0.45, 5);
   const m = new TileMap(W, H, {
     kind: 'interior', voidColor: '#000000',
-    bgPal: ice ? ['#0a1220', '#03050a', '#1e4a7a', '#16263a'] : mine ? ['#110d0a', '#040302', '#1a3c6c', '#221a14'] : ['#0b0d16', '#030305', '#1a3c6c', '#191b2c'],
+    bgPal: ice ? ['#0a1220', '#03050a', '#163a60', '#16263a'] : mine ? ['#110d0a', '#040302', '#132e56', '#221a14'] : ['#0b0d16', '#030305', '#132e56', '#191b2c'],
     ambient: ice ? [0.3, 0.36, 0.5] : mine ? [0.26, 0.22, 0.2] : [0.22, 0.22, 0.32],
   });
   const crystal = ice ? 'crystalIce' : (R() < 0.5 ? 'crystal' : 'crystalPurple');
@@ -284,14 +284,22 @@ function genCave(seed, ice, kind, depth) {
   const ex = cand.length ? cand[Math.floor(R() * cand.length)] : floor.indexOf(1);
   const exX = ex % W, exY = (ex / W) | 0;
   m.spawn = { x: exX, y: exY + 1 };
-  // pools of water
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const i = y * W + x;
-    if (!floor[i] || Math.abs(x - exX) + Math.abs(y - exY) < 6) continue;
-    if (fbm(x * 0.09, y * 0.09, seed + 2, 3) > (mine ? 0.7 : 0.64)) {
-      m.water[i] = 1; m.solid[i] = 1; m.bg[i] = 2;
-      if (R() < 0.6) m.glyph[i] = G[ice ? 'waveCaveIce' : 'waveCave'];
+  // pools of water, tidied into solid bodies: lone tiles dry up, gaps fill in
+  const pool = new Uint8Array(W * H), canPool = (i) => floor[i] && Math.abs(i % W - exX) + Math.abs(((i / W) | 0) - exY) >= 6;
+  for (let i = 0; i < W * H; i++) if (canPool(i) && fbm((i % W) * 0.09, ((i / W) | 0) * 0.09, seed + 2, 3) > (mine ? 0.7 : 0.64)) pool[i] = 1;
+  for (let pass = 0; pass < 2; pass++) {
+    const next = pool.slice();
+    for (let i = W; i < W * H - W; i++) {
+      const n = pool[i - 1] + pool[i + 1] + pool[i - W] + pool[i + W];
+      if (pool[i] && n <= 1) next[i] = 0;
+      else if (!pool[i] && n >= 3 && canPool(i)) next[i] = 1;
     }
+    pool.set(next);
+  }
+  for (let i = 0; i < W * H; i++) {
+    if (!pool[i]) continue;
+    m.water[i] = 1; m.solid[i] = 1; m.bg[i] = 2;
+    if (R() < 0.85) m.glyph[i] = G[ice ? 'waveCaveIce' : 'waveCave'];
   }
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const i = y * W + x;

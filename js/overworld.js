@@ -227,8 +227,8 @@ function genOverworld(seed) {
     }
     if (water[i]) {
       solid[i] = 1; bg[i] = b === B.SNOW ? BG_ICE : BG_RIVER;
-      if (r < 0.62) m.glyph[i] = G[b === B.SNOW ? 'waveIce' : 'wave'];
-      else if (r < 0.75) m.glyph[i] = G.bubble;
+      if (r < 0.8) m.glyph[i] = G[b === B.SNOW ? 'waveIce' : 'wave'];
+      else if (r < 0.9) m.glyph[i] = G.bubble;
       continue;
     }
     const n = fbm(x * 0.12, y * 0.12, seed + 20, 2);
@@ -277,7 +277,7 @@ function genOverworld(seed) {
       case B.LAKE:
         if (e >= 2) {
           water[i] = 1; solid[i] = 1; bg[i] = BG_LAKE;
-          if (r < 0.5) put(x, y, 'wave', 1); else if (r < 0.68) put(x, y, 'bubble', 1);
+          if (r < 0.72) put(x, y, 'wave', 1); else if (r < 0.86) put(x, y, 'bubble', 1);
         } else if (r < 0.2) put(x, y, 'grass', 0, fl);
         else if (r < 0.26) put(x, y, 'tuft', 0, fl);
         break;
@@ -334,7 +334,7 @@ function genOverworld(seed) {
       case B.MARSH:
         if (n2 > 0.57 && ef > 0.3) {
           water[i] = 1; solid[i] = 1; bg[i] = BG_REDWATER;
-          if (r < 0.55) put(x, y, 'waveRed', 1); else if (r < 0.7) put(x, y, 'bubbleRedBright', 1);
+          if (r < 0.72) put(x, y, 'waveRed', 1); else if (r < 0.86) put(x, y, 'bubbleRedBright', 1);
         } else if (r < 0.12) put(x, y, 'grassRed', 0, fl);
         else if (r < 0.16) put(x, y, 'tuftRed', 0, fl);
         else if (r < 0.18) put(x, y, 'flowerO');
@@ -387,6 +387,28 @@ function genOverworld(seed) {
       }
     }
   }
+  // tidy inland water: a tile with at most one watery neighbour dries up, and a
+  // dry tile hemmed in on three sides by lake, river, marsh or lava joins it
+  {
+    const WATER_GLYPH = { [BG_LAKE]: 'wave', [BG_RIVER]: 'wave', [BG_ICE]: 'waveIce', [BG_REDWATER]: 'waveRed', [BG_LAVA]: 'lava' };
+    const dry = [], wet = [];
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x;
+      if (!land[i]) continue;
+      const nb = [i - 1, i + 1, i - W, i + W], n = nb.reduce((a, j) => a + water[j], 0);
+      if (water[i] && n <= 1) dry.push(i);
+      else if (!water[i] && n >= 3 && !solid[i]) {
+        const j = nb.find((q) => water[q] && land[q] && WATER_GLYPH[bg[q]]);
+        if (j !== undefined) wet.push([i, j]);
+      }
+    }
+    for (const i of dry) { water[i] = 0; solid[i] = 0; m.glyph[i] = 0; bg[i] = biome[i]; }
+    for (const [i, j] of wet) {
+      water[i] = 1; solid[i] = 1; bg[i] = bg[j];
+      m.glyph[i] = rnd(i % W, (i / W) | 0, 14) < 0.85 ? G[WATER_GLYPH[bg[j]]] : 0;
+    }
+  }
+
   // giant mushrooms (2x2)
   for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 3; x++) {
     const i = y * W + x;

@@ -482,6 +482,18 @@ const LAIR_THEMES = [
    { name: 'gridlock2', floor: ['#c84aa8', '#3ab8c8', '#16161e'], pat: 'checker', wallBg: '#1a0a2a', wall: ['neonWall', 'neonWallCyan'], paint: ['pSunset'], centre: ['bust'],
     props: [['cone', 0.8, 1], ['vendingRed', 0.4, 1], ['tvStatic', 0.4, 1], ['streetLamp', 0.3, 1]], npcs: [], foes: ['c_trash', 'c_cart', 'c_paparazzi', 'c_roomba'],
     parts: ['star', 'confettiY'], amb: [0.46, 0.4, 0.52], fx: { hue: 0.15 } }],
+  [{ name: 'dusk', floor: ['#2a1e14', '#3a2a1a', '#5a3a20'], pat: 'sandstone', wallBg: '#140c06', wall: ['brickSand'], paint: [], centre: ['pyramid'],
+    props: [['cactus', 0.6, 1], ['skullBone', 0.6, 0], ['obelisk', 0.2, 1], ['torch', 0.25, 1]], npcs: [], foes: ['c_bat', 'c_bat', 'c_dragon'],
+    parts: ['dust', 'mote'], amb: [0.44, 0.38, 0.34], fx: { warp: 0.5 } },
+   { name: 'dusk2', floor: ['#1a1030', '#24183e', '#3a2a5a'], pat: 'swirl', wallBg: '#0a0618', wall: ['brickNight'], paint: [], centre: ['cypress'],
+    props: [['starProp', 1, 0], ['moonProp', 0.2, 0], ['deadTree', 0.4, 1]], npcs: [], foes: ['c_bat', 'c_bat', 'c_shadow'],
+    parts: ['star', 'firefly'], amb: [0.4, 0.36, 0.5], fx: { warp: 0.7 } }],
+  [{ name: 'signal', floor: ['#2a1a3a', '#1a2a3a', '#4a2a5a'], pat: 'grid', wallBg: '#0a0614', wall: ['neonWall', 'neonWallCyan'], paint: ['pSunset'], centre: ['tvStatic'],
+    props: [['tvStatic', 0.6, 1], ['vending', 0.3, 1], ['streetLamp', 0.3, 1]], npcs: [], foes: ['c_tvhead', 'c_cctv', 'c_phone'],
+    parts: ['rain'], amb: [0.44, 0.38, 0.5], fx: { ca: 1.4 } },
+   { name: 'signal2', floor: ['#16161e', '#0a2a3a', '#1e4a5a'], pat: 'caustic', wallBg: '#06121a', wall: ['neonWallCyan'], paint: [], centre: ['bust'],
+    props: [['tvStatic', 0.8, 1], ['phoneBox', 0.3, 1], ['cone', 0.4, 1]], npcs: [], foes: ['c_tvhead', 'c_tvhead', 'c_drone'],
+    parts: ['star'], amb: [0.4, 0.42, 0.5], fx: { hue: 0.1, ca: 1 } }],
 ];
 
 function applyDream(m, ent, seed, theme) {

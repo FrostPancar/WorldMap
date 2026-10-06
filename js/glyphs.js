@@ -384,8 +384,8 @@ variant('waveRed', 'wave', [P.red]);
 variant('waveOcean', 'wave', [P.waterD]);
 variant('waveDeep', 'wave', ['#1c3a70']);
 variant('waveIce', 'wave', [P.iceD]);
-variant('waveCave', 'wave', ['#5a9ae8'], { emit: true }); // underground water glints so it reads in the dark
-variant('waveCaveIce', 'wave', ['#8ad0f0'], { emit: true });
+variant('waveCave', 'wave', ['#4a80c8']); // underground water, light enough to read in the dark
+variant('waveCaveIce', 'wave', ['#6aa8d0']);
 variant('bubbleRed', 'bubble', [P.redD]);
 variant('bubbleDim', 'bubble', [P.waterD]);
 variant('bubbleRedBright', 'bubble', [P.red]);

@@ -130,6 +130,39 @@ bigBoss('w_trash', ['#0e0e14', '#3a3a4a', '#24242e', '#5a5a6a', '#f0c030', '#801
   P.eye(11, 17 + s); P.eye(12, 17 + s); P.eye(20, 17 + s); P.eye(21, 17 + s);
 }, [5]);
 
+// Vampire Bat: a vast bat with scalloped wings, big ears and red-tipped fangs
+bigBoss('w_bat', ['#1a0a2a', '#a86ae8', '#6a3aa8', '#d8b0ff', '#ff5a50', '#801010'], (P, f) => {
+  const up = f ? -3 : 0;
+  for (const s of [-1, 1]) {
+    for (let k = 0; k < 13; k++) {                                     // membrane, scalloped along the bottom
+      const x = 16 + s * (4 + k), top = 9 + Math.round(k * 0.35) + Math.round(up * k / 12), bot = 21 - (k % 4 === 3 ? 3 : k % 4) - Math.round(k * 0.25) + Math.round(up * k / 16);
+      for (let y = top; y <= bot; y++) P.px(x, y, y === top ? '2' : '3');
+    }
+    P.line(16 + s * 4, 10, 16 + s * 16, 8 + up, '2', 2);                // wing arm
+    for (const k of [5, 9, 12]) P.line(16 + s * (4 + k), 9 + Math.round(k * 0.35) + Math.round(up * k / 12), 16 + s * (4 + k), 18 - Math.round(k * 0.25), '2'); // finger bones
+  }
+  P.ell(16, 16, 5, 7, '2', 1);                                           // body
+  P.ell(16, 8, 4.5, 4, '2', 1);                                          // head
+  P.line(12, 6, 11, 1, '2', 2); P.line(20, 6, 21, 1, '2', 2);            // ears
+  P.px(14, 11, '5'); P.px(18, 11, '5'); P.px(14, 12, '4'); P.px(18, 12, '4'); // fangs
+  P.line(14, 23, 13, 27, '3'); P.line(18, 23, 19, 27, '3');              // feet
+  P.eye(14, 8); P.eye(18, 8);
+}, [5]);
+
+// Prime Broadcast: a towering TV-head in a suit, its screen a storm of static
+bigBoss('w_tv', ['#0e0e14', '#3a3a4a', '#24242e', '#8a8a90', '#9ae8ff', '#801010'], (P, f) => {
+  const s = f ? 1 : 0;
+  P.line(12, 3, 8, 0, '4'); P.line(20, 3, 24, 0, '4');                   // antennae
+  P.rect(4, 3, 28, 18, '4'); P.rect(5, 4, 27, 17, '2');                  // the set
+  P.rect(7, 5, 25, 15, '5');                                             // glowing screen
+  for (let y = 6; y < 15; y += 2) for (let x = 8 + ((y + s) % 3); x < 25; x += 4) P.px(x, y, '4'); // static
+  P.rect(14, 19, 18, 20, '2');                                           // neck
+  P.rect(9, 21, 23, 29 - s, '2'); P.rect(15, 21, 17, 26, '4'); P.px(16, 23, '5'); // suit, shirt, tie pin
+  P.rect(5, 21, 8, 27 + s, '2'); P.rect(24, 21, 27, 27 - s, '2');        // arms
+  P.rect(10, 30 - s, 14, 31, '3'); P.rect(18, 30 - s, 22, 31, '3');      // shoes
+  P.eye(12, 9); P.eye(13, 9); P.eye(19, 9); P.eye(20, 9); P.eye(12, 10); P.eye(13, 10); P.eye(19, 10); P.eye(20, 10);
+}, [5]);
+
 // --- crystals ------------------------------------------------------------------------
 const CRYSTALS = [
   { name: 'GRAVE CRYSTAL', col: '#7aff6a', hi: '#e0ffd8' },
@@ -137,6 +170,8 @@ const CRYSTALS = [
   { name: 'FROST CRYSTAL', col: '#4ae8f0', hi: '#e8ffff' },
   { name: 'EMBER CRYSTAL', col: '#ff7a2a', hi: '#ffe0a0' },
   { name: 'CHROME CRYSTAL', col: '#f0c040', hi: '#fff4c0' },
+  { name: 'DUSK CRYSTAL', col: '#d84a8a', hi: '#ffd0e8' },
+  { name: 'SIGNAL CRYSTAL', col: '#4ad8ff', hi: '#e0fbff' },
 ];
 const CRYSTAL_SLOTS = 7;
 CRYSTALS.forEach((c, i) => {
@@ -157,6 +192,10 @@ const WORLD_BOSSES = [
     moves: ['rain', 'volley', 'gapRing', 'rain', 'spiral'], ring: 'peakBasalt', light: 'brazier' },
   { g: 'w_trash', name: 'GARBAGE TITAN', hp: 250, dmg: 2, spd: 1.0, col: '#f0c030', summon: 'c_trash', biomes: [B.PLAINS, B.GRASS],
     moves: ['lob', 'wall', 'summon', 'rain', 'gapRing'], ring: 'rock', light: 'lantern' },
+  { g: 'w_bat', name: 'VAMPIRE BAT', hp: 230, dmg: 2, spd: 1.3, col: '#ff5a50', summon: 'c_bat', biomes: [B.DUNES, B.MOUNT, B.AUTUMN],
+    moves: ['leap', 'volley', 'summon', 'spiral', 'leap', 'rain'], ring: 'cactus', light: 'brazier' },
+  { g: 'w_tv', name: 'PRIME BROADCAST', hp: 250, dmg: 2, spd: 0.9, col: '#9ae8ff', summon: 'c_tvhead', biomes: [B.PINK, B.CRYSTAL, B.GRASS],
+    moves: ['wall', 'gapRing', 'rain', 'spiral', 'summon', 'volley'], ring: 'stone', light: 'lanternBlue' },
 ];
 WORLD_BOSSES.forEach((b, i) => {
   b.i = i; b.world = true;
@@ -171,6 +210,7 @@ WORLD_BOSSES.forEach((b, i) => {
 const LAIR_GATE_COLS = [
   ['#2a3a30', '#14201a', '#05080a', '#ff5a50'], ['#5a7a2a', '#3a2a4a', '#05080a', '#4ae8e0'], ['#8ccaf0', '#5a94c0', '#0a1420', '#7af0ff'],
   ['#4a3434', '#2a1a1a', '#0a0404', '#ff7a1a'], ['#3a3a4a', '#24242e', '#05050a', '#f0c030'],
+  ['#5a4a3a', '#3a2a1a', '#0a0604', '#a86ae8'], ['#3a3a4a', '#24242e', '#05050a', '#ff4ad8'],
 ];
 LAIR_GATE_COLS.forEach((cols, k) => {
   defGlyph('lairGate' + k, rowsFrom(16, 16, (x, y) => {
@@ -196,7 +236,7 @@ function genLairArena(seed, ent) {
 }
 
 const WorldBosses = {
-  marks: [], drops: [],
+  marks: [], drops: [], anim: null,
   AGGRO: 15, // tiles from the lair within which the boss fights you
 
   // --- per boss (only where we run the enemies) ----------------------------------------
@@ -347,11 +387,19 @@ const WorldBosses = {
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const d = this.drops[i];
       d.t += dt;
-      if (d.map !== game.map || d.t < 1.2) continue;
-      // after a moment the crystal floats over to you, wherever you are
-      const dx = px - d.x, dy = py - d.y, dd = Math.hypot(dx, dy), sp = Math.min(dd, (60 + d.t * 60) * dt);
-      if (dd < 6) { this.drops.splice(i, 1); this.gain(d.k); continue; }
-      d.x += dx / dd * sp; d.y += dy / dd * sp;
+      // the crystal waits where the boss fell; walk onto it to claim it
+      if (d.map !== game.map || d.t < 1 || this.anim || Math.hypot(px - d.x, py - d.y) > 8) continue;
+      this.drops.splice(i, 1);
+      this.anim = { k: d.k, t: 0 };
+      Sound.sfx('absorb', 392);
+    }
+    // the claim: about two seconds where the crystal rises over you, spins up
+    // a crown of light, then sinks into you (you stand still meanwhile)
+    if (this.anim) {
+      const A = this.anim, C = CRYSTALS[A.k];
+      A.t += dt;
+      if (Math.random() < dt * 40) { const a = Math.random() * Math.PI * 2, r = 20 + Math.random() * 14; spawnParticle('beamSpark', px + Math.cos(a) * r, py - 14 + Math.sin(a) * r, -Math.cos(a) * 30, -Math.sin(a) * 30, 0.6, Math.random() < 0.5 ? C.col : '#ffffff'); }
+      if (A.t >= 2) { this.anim = null; this.gain(A.k); }
     }
   },
   gain(k) {
@@ -403,6 +451,22 @@ const WorldBosses = {
       S.drawImage(spr(C.g, 0, false), x, y); E.drawImage(spr(C.g, 0, false), x, y);
       L.push({ x: d.x, y: d.y - 4, rgb: C.rgb, r: 40, i: 1.2 + Math.sin(t * 4) * 0.3 });
       if (Math.random() < 0.3) spawnParticle('beamSpark', d.x + (Math.random() - 0.5) * 8, d.y - 2, 0, -15, 0.6, C.col);
+    }
+    if (this.anim) {
+      const A = this.anim, C = CRYSTALS[A.k], p = game.player, cx = p.px + 4, f = A.t;
+      const rise = f < 0.6 ? f / 0.6 : f > 1.75 ? Math.max(0, 1 - (f - 1.75) / 0.25) : 1;
+      const cy = p.py + 4 - (1 - Math.pow(1 - rise, 2)) * 16 + Math.sin(f * 6) * (rise >= 1 ? 1 : 0);
+      const sc = f < 1.75 ? 1 + Math.min(1, f / 0.8) : 1 + rise;
+      // a turning crown of rays behind the crystal
+      const n = 10, len = 6 + Math.min(1, f) * 10;
+      for (let k = 0; k < n; k++) {
+        const a = f * 2.5 + (k / n) * Math.PI * 2;
+        for (let d = 7; d < 7 + len; d += 1.5) dot(cx + Math.cos(a) * d, cy + Math.sin(a) * d, k % 2 ? C.col : C.hi, rise * (1 - (d - 7) / (len + 2)));
+      }
+      const sz = Math.round(8 * sc), x = Math.round(cx - sz / 2 - ox), y = Math.round(cy - sz / 2 - oy);
+      S.globalAlpha = 1; E.globalAlpha = 1;
+      S.drawImage(spr(C.g, 0, false), x, y, sz, sz); E.drawImage(spr(C.g, 0, false), x, y, sz, sz);
+      L.push({ x: cx, y: cy, rgb: C.rgb, r: 30 + rise * 40, i: 0.8 + rise * 1.2 });
     }
     S.globalAlpha = 1; E.globalAlpha = 1;
   },
