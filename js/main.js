@@ -513,8 +513,8 @@ function boot() {
   seedOverworldItems(game.world, seed);
   seedUrbanEnemies(game.world, seed);
   lockEntrances(game.world, seed);
+  assignTraders(game.world, seed);
   seedOverworldKeys(game.world, seed);
-  seedWorldBosses(game.world);
   Combat.number(game.world.map);
   Combat.hp = Combat.maxHp();
   game.player.place(game.world.start.x, game.world.start.y);

@@ -74,7 +74,20 @@ BOSSES.forEach((b, i) => {
 // --- the arena interior ---------------------------------------------------------------
 function genArena(seed, ent) {
   const bi = ((ent.poi && ent.poi.boss) || 0) % BOSSES.length, BD = BOSSES[bi], A = BD.arena;
-  const W = 46, H = 38, R = mulberry32(seed);
+  const { m, cx, cy, R } = arenaRoom(seed, A, 46, 38);
+  if (!Combat.bossDown.has(String(ent.id))) {
+    const c = makeCreature(BD.g, cx, cy - 4, -1, R);
+    c.boss = BD; c.r = 11; c.atkCd = 2.5; c.mi = 0; c.spin = 0; c.wait = 1;
+    m.creatures.push(c);
+  }
+  m.dream = { name: 'arena', parts: A.parts, fx: {}, light: 1.2 };
+  m.finalize();
+  return m;
+}
+// a wide oval hall with a door at the bottom, a ring of pillars and four braziers
+// A: { floor: [3 colours], wallBg, wall, torch, amb }
+function arenaRoom(seed, A, W, H) {
+  const R = mulberry32(seed);
   const m = new TileMap(W, H, { kind: 'interior', voidColor: '#000000', bgPal: [A.floor[0], A.floor[1], A.wallBg, A.floor[2]], ambient: A.amb });
   const floor = new Uint8Array(W * H), cx = W >> 1, cy = (H >> 1) + 1;
   const rx = W / 2 - 2.5, ry = H / 2 - 3.5;
@@ -115,14 +128,7 @@ function genArena(seed, ent) {
   ensureReachable(m, floor);
   m.wall = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) m.wall[i] = !floor[i] && !m.entr.has(i) ? 1 : 0;
-  if (!Combat.bossDown.has(String(ent.id))) {
-    const c = makeCreature(BD.g, cx, cy - 4, -1, R);
-    c.boss = BD; c.r = 11; c.atkCd = 2.5; c.mi = 0; c.spin = 0; c.wait = 1;
-    m.creatures.push(c);
-  }
-  m.dream = { name: 'arena', parts: A.parts, fx: {}, light: 1.2 };
-  m.finalize();
-  return m;
+  return { m, cx, cy, R };
 }
 
 // --- boss behaviour (runs where we are the enemy authority) ---------------------------

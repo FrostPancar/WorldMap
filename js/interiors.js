@@ -37,23 +37,27 @@ function genInterior(ent) {
       m = genRoom(seed, ent.type); break;
     case 'arena': m = genArena(seed, ent); break;
     case 'trophy': m = genTrophy(seed, ent); break;
+    // a world-boss lair: two dreamlike cave floors, then the boss's hall
+    case 'lair': m = depth >= 2 ? genLairArena(seed, ent) : genCave(seed, false, null, depth); break;
     default: m = genCave(seed, false, null, depth);
   }
   markWalls(m);
-  const plain = ent.type === 'arena' || ent.type === 'trophy'; // these keep their own look
-  if (!plain) applyDream(m, ent, seed);
+  const lair = ent.type === 'lair';
+  const plain = ent.type === 'arena' || ent.type === 'trophy' || (lair && depth >= 2); // these keep their own look
+  if (!plain) applyDream(m, ent, seed, lair ? LAIR_THEMES[ent.poi.lair][depth] : null);
   seedInteriorOrb(m, m.dream.name, seed);
   if (ent.type !== 'arena') seedInteriorItems(m, ent.type === 'trophy' ? { type: ent.parent } : ent, seed);
   if (HOMEY[ent.type]) {
     // homes are safe: no enemies, and about half have a special trader
     m.creatures = m.creatures.filter((c) => !ENEMY_DEF[GLYPHS[c.g].name]);
-    if (hash2(ent.id | 0, 41, ent.seed) < 0.5) addTrader(m, seed);
+    if (ent.trader) addTrader(m, seed, ent.id); // see assignTraders: at most one per village
   }
   Combat.number(m);
   m.finalize();
-  if (depth && !plain) m.ambient = m.ambient.map((a) => a * Math.pow(0.8, depth));
+  if (depth && !plain && !lair) m.ambient = m.ambient.map((a) => a * Math.pow(0.8, depth));
   // every level leads on: down a stairway, and from the deepest one into a trophy room
   if (DEEP[ent.type]) addStairsDown(m, ent, depth, seed, depth >= DEEP_MAX);
+  if (lair && depth < 2) addStairsDown(m, ent, depth, seed, false);
   if (DEEP[ent.type] && hash2(String(ent.id).length * 97 + depth, 61, ent.seed) < 0.1) addCaveExit(m, ent, seed);
   return m;
 }
@@ -70,7 +74,7 @@ function markWalls(m) {
 }
 
 // A trader stands somewhere roomy (all eight neighbours open) away from the door.
-function addTrader(m, seed) {
+function addTrader(m, seed, id) {
   const R = mulberry32(seed ^ 0x2b7e1516), W = m.w, cand = [];
   for (let y = 2; y < m.h - 2; y++) for (let x = 2; x < W - 2; x++) {
     if (Math.abs(x - m.spawn.x) + Math.abs(y - m.spawn.y) < 3) continue;
@@ -84,7 +88,7 @@ function addTrader(m, seed) {
   if (!cand.length) return;
   const i = cand[Math.floor(R() * cand.length)], x = i % W, y = (i / W) | 0;
   const c = makeCreature('c_trader', x, y, -1, R);
-  c.npc = true; c.flip = x > m.spawn.x;
+  c.npc = true; c.flip = x > m.spawn.x; c.traderId = String(id);
   m.creatures.push(c);
   m.solid[i] = 1;
 }
@@ -100,7 +104,7 @@ function addStairsDown(m, ent, depth, seed, trophy) {
   const i = cand[Math.floor(R() * cand.length)];
   const x = i % m.w, y = (i / m.w) | 0;
   if (trophy) m.entr.set(i, { id: ent.id + '>T', type: 'trophy', parent: ent.type, seed: ent.seed, depth: depth + 1 });
-  else m.entr.set(i, { id: ent.id + '>' + (depth + 1), type: ent.type, seed: ent.seed, depth: depth + 1, locked: hash2(depth, 3, seed) < 0.4 });
+  else m.entr.set(i, { id: ent.id + '>' + (depth + 1), type: ent.type, seed: ent.seed, depth: depth + 1, poi: ent.poi, locked: ent.type !== 'lair' && hash2(depth, 3, seed) < 0.4 });
   Combat.placeLive(m, x, y, trophy ? 'stairsGold' : 'stairsDown');
 }
 

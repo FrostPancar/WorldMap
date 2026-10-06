@@ -101,7 +101,7 @@ function baseName(c) { return GLYPHS[c.g].name; }
 
 const Combat = {
   projectiles: [], slashes: [], gems: [], numbers: [], cd: 0, toast: null, hurtT: 0,
-  inv: ['sling'], eq: 0, xp: 0, ability: 0, specials: ['beam'], bossDown: new Set(), talkT: -9, crystals: [], worldDown: new Set(),
+  inv: ['sling'], eq: 0, xp: 0, ability: 0, specials: ['beam'], bossDown: new Set(), talkT: -9, traded: new Set(), crystals: [], worldDown: new Set(),
   hp: 8, invT: 0, deathT: 0, lastHurt: -99, regenT: 0, auth: true, heartsT: 0, keys: 0, unlocked: new Set(),
   hitBuf: [], tameBuf: [], esBuf: [], seq: 1, snapT: 0, atkEvt: null,
 
@@ -116,6 +116,7 @@ const Combat = {
         if (Array.isArray(s.sp)) this.specials = ['beam'].concat(s.sp.filter((k) => SPECIALS[k] && k !== 'beam'));
         this.ability = clamp(s.ab | 0, 0, this.specials.length - 1);
         this.bossDown = new Set(Array.isArray(s.bd) ? s.bd.map(String) : []);
+        this.traded = new Set(Array.isArray(s.td) ? s.td.map(String) : []);
         if (Array.isArray(s.cr)) this.crystals = s.cr.filter((k) => Number.isInteger(k) && k >= 0 && k < CRYSTAL_SLOTS);
         this.worldDown = new Set(Array.isArray(s.wd) ? s.wd.filter((k) => Number.isInteger(k)) : []);
       }
@@ -124,7 +125,7 @@ const Combat = {
   save() {
     try {
       localStorage.setItem('worldmap-combat', JSON.stringify({ inv: this.inv, eq: this.eq, xp: this.xp, keys: this.keys, un: [...this.unlocked].slice(-300),
-        sp: this.specials, ab: this.ability, bd: [...this.bossDown], cr: this.crystals, wd: [...this.worldDown] }));
+        sp: this.specials, ab: this.ability, bd: [...this.bossDown], td: [...this.traded], cr: this.crystals, wd: [...this.worldDown] }));
     } catch (e) { /* no storage */ }
   },
   special() { return this.specials[this.ability] || 'beam'; },
@@ -136,7 +137,7 @@ const Combat = {
   say(text, icon) { this.toast = { text: text || '', icon, life: 2.2 }; },
   showHearts() { this.heartsT = 2.6; },
 
-  maxHp() { return 8 + (this.level() - 1) * 2; },
+  maxHp() { return 8 + (this.level() - 1); }, // half a heart more per level
   ensure(c) {
     if (c.maxhp !== undefined) return;
     const def = ENEMY_DEF[baseName(c)];
@@ -291,7 +292,7 @@ const Combat = {
         game.map.creatures.push(b);
       }
     }
-    if (Math.random() < 0.18) this.gems.push({ x: c.px + 4, y: c.py + 4, vx: 0, vy: -30, val: 0, heal: 2, map: game.map, t: 0 });
+    if (Math.random() < 0.07) this.gems.push({ x: c.px + 4, y: c.py + 4, vx: 0, vy: -30, val: 0, heal: 2, map: game.map, t: 0 });
     const m = game.map, i = m.creatures.indexOf(c);
     if (i >= 0) m.creatures.splice(i, 1);
     const x = c.px + 4, y = c.py + 4;
@@ -308,7 +309,7 @@ const Combat = {
   hurt(dmg) {
     if (this.invT > 0 || this.deathT > 0 || game.pending || Powers.flight) return; // nothing reaches you in the air
     if (Powers.possess) Powers.endPossess(true);
-    this.hp -= dmg; this.invT = 0.9; this.hurtT = 0.35; this.lastHurt = game.time; this.showHearts(); game.player.hitT = 0.3;
+    this.hp -= dmg * 1.5; this.invT = 0.9; // the world hits half again as hard as the numbers say this.hurtT = 0.35; this.lastHurt = game.time; this.showHearts(); game.player.hitT = 0.3;
     Powers.shake = Math.max(Powers.shake, 2); Sound.sfx('hurt');
     const p = game.player;
     for (let n = 0; n < 8; n++) spawnParticle('beamSpark', p.px + 4, p.py + 4, (Math.random() - 0.5) * 60, (Math.random() - 0.5) * 60, 0.35, '#ff4a4a');
@@ -406,7 +407,7 @@ const Combat = {
     if (!c || game.time - this.talkT < 1.2) return !!c;
     this.talkT = game.time; c.emote = 0; c.talk = 1.5;
     const missing = Object.keys(SPECIALS).filter((k) => this.specials.indexOf(k) < 0);
-    if (!missing.length) { Sound.sfx('ui'); return true; }
+    if (!missing.length || this.traded.has(c.traderId)) { Sound.sfx('ui'); return true; } // each trader deals only once
     if (this.inv.length < 5) { this.say(this.inv.length + '/5', G.item_rustySword); Sound.sfx('locked'); return true; }
     const take = shuffle(this.inv.slice(), Math.random).slice(0, 5);
     this.inv = this.inv.filter((id) => take.indexOf(id) < 0);
@@ -414,6 +415,7 @@ const Combat = {
     this.eq = 0;
     const k = missing[Math.floor(Math.random() * missing.length)];
     this.specials.push(k); this.ability = this.specials.length - 1;
+    this.traded.add(c.traderId);
     this.say('', G[SPECIALS[k].icon]);
     const p = game.player;
     for (const id of take) {
@@ -445,9 +447,9 @@ const Combat = {
     this.invT = Math.max(0, this.invT - dt);
     if (p.hitT > 0) p.hitT -= dt;
     this.auth = this.amAuth();
-    if (this.hp < this.maxHp() && this.deathT <= 0 && game.time - this.lastHurt > 6) {
+    if (this.hp < this.maxHp() && this.deathT <= 0 && game.time - this.lastHurt > 9) {
       this.regenT -= dt;
-      if (this.regenT <= 0) { this.regenT = 3.5; this.hp = Math.min(this.maxHp(), this.hp + 1); this.showHearts(); }
+      if (this.regenT <= 0) { this.regenT = 6; this.hp = Math.min(this.maxHp(), this.hp + 1); this.showHearts(); }
     }
     if (this.toast && (this.toast.life -= dt) <= 0) this.toast = null;
     // creatures: befriending, pets, enemies
@@ -688,6 +690,7 @@ const Combat = {
       // the special trader: a lantern glow and a bobbing sword sign above the hood
       if (c.npc) {
         L.push({ x: c.px + 6, y: c.py - 2, rgb: [255, 216, 144], r: 34, i: 0.9 });
+        if (this.traded.has(c.traderId)) continue; // already traded: no sign
         const sy = y - 10 + Math.round(Math.sin(t * 3) * 1.5), g = G.item_rustySword;
         S.drawImage(spr(g, 0, false), x, sy); E.globalAlpha = 0.7; E.drawImage(spr(g, 0, false), x, sy); E.globalAlpha = 1;
         continue;
@@ -911,7 +914,7 @@ const Combat = {
       S.globalAlpha = a * 0.6; S.fillStyle = '#0b0b10'; S.fillRect(hx0 - 3, y - 2, hearts * 6 + 5, 9); S.globalAlpha = a;
       const shape = ['11.11', '11111', '11111', '.111.', '..1..'];
       for (let k = 0; k < hearts; k++) {
-        const v = clamp(this.hp - k * 2, 0, 2), x = hx0 + k * 6;
+        const v = clamp(Math.ceil(this.hp) - k * 2, 0, 2), x = hx0 + k * 6;
         for (let j = 0; j < 5; j++) for (let i = 0; i < 5; i++) {
           if (shape[j][i] !== '1') continue;
           const full = v >= 2 || (v >= 1 && i < 3);
@@ -968,6 +971,17 @@ function seedInteriorItems(m, ent, seed) {
       m.items.push({ x: i % m.w, y: (i / m.w) | 0, id: pickItem(tags, R()) });
     }
   }
+}
+// Traders: at most one house per village has one (about three villages in
+// four do), and about half of the hollow trees, witch huts and lighthouses.
+function assignTraders(world, seed) {
+  const R = mulberry32(seed ^ 0x5f3759df);
+  for (const p of world.pois) {
+    if (p.type !== 'village') continue;
+    const houses = world.entrances.filter((e) => e.poi === p && e.type === 'house');
+    if (houses.length && R() < 0.75) houses[Math.floor(R() * houses.length)].trader = true;
+  }
+  for (const e of world.entrances) if ((e.type === 'hollow' || e.type === 'witch' || e.type === 'lighthouse') && hash2(e.id, 41, e.seed) < 0.5) e.trader = true;
 }
 // Some doors are locked. Keys lie around camps, villages and ruins outdoors,
 // inside caves and dungeons, and in chests.

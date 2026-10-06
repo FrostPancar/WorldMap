@@ -448,8 +448,44 @@ function dreamTheme(ent) {
   return THEMES[(Math.abs(hashStr(id)) + (ent.depth || 0) * 5) % THEMES.length];
 }
 
-function applyDream(m, ent, seed) {
-  const T = dreamTheme(ent);
+// Dreamlike biome floors inside the world-boss lairs, two per boss (in the
+// order of WORLD_BOSSES: spider, slime, ghost, dragon, garbage). foes: the
+// enemies that roam them.
+const LAIR_THEMES = [
+  [{ name: 'webs', floor: ['#0e1a16', '#14241e', '#1e3a2a'], pat: 'veins', wallBg: '#060c0a', wall: ['rockMoss'], paint: [], centre: ['deadTree'],
+    props: [['cobweb', 2.2, 0], ['deadTreeDark', 0.4, 1], ['grave', 0.3, 1], ['torchGreen', 0.25, 1]], npcs: [], foes: ['c_spider', 'c_spider', 'c_bat'],
+    parts: ['wisp', 'mote'], amb: [0.32, 0.4, 0.34], fx: { warp: 0.5 } },
+   { name: 'webs2', floor: ['#1a0e1e', '#24142a', '#3a1e3a'], pat: 'swirl', wallBg: '#0a060c', wall: ['rockMoss'], paint: [], centre: ['giantEye'],
+    props: [['cobweb', 2.6, 0], ['eyeFloat', 0.5, 0], ['deadTreeDark', 0.5, 1], ['torchGreen', 0.25, 1]], npcs: [], foes: ['c_spider', 'c_spider', 'c_eyeball'],
+    parts: ['wisp'], amb: [0.36, 0.3, 0.4], fx: { warp: 0.8, hue: 0.05 } }],
+  [{ name: 'spores', floor: ['#1a2a10', '#24381a', '#3a2a4a'], pat: 'grass', wallBg: '#0c1408', wall: ['rockMoss'], paint: [], centre: ['mushroomBig'],
+    props: [['glowShroom', 1.4, 0], ['glowShroomPurple', 0.9, 0], ['mushSmall', 0.8, 1], ['mushBrown', 0.8, 0]], npcs: ['c_frog'], foes: ['c_slime', 'c_slime'],
+    parts: ['spore', 'firefly'], amb: [0.4, 0.44, 0.4], fx: { hue: 0.06 } },
+   { name: 'spores2', floor: ['#2a1a3a', '#3a2450', '#4ad8c8'], pat: 'caustic', wallBg: '#140a1e', wall: ['brickPurple'], paint: [], centre: ['mushroomBig', 'mushroomBig'],
+    props: [['glowShroomPurple', 1.6, 0], ['glowShroom', 1, 0], ['bubble', 0.6, 0]], npcs: [], foes: ['c_slime', 'c_slime', 'c_frog'],
+    parts: ['spore', 'bubbleUp'], amb: [0.42, 0.36, 0.46], fx: { warp: 0.7, hue: 0.12 } }],
+  [{ name: 'frost', floor: ['#16263a', '#1e3450', '#8ccaf0'], pat: 'mosaic', wallBg: '#08101a', wall: ['brickIce'], paint: [], centre: ['crystalBigCyanLit'],
+    props: [['crystalIce', 0.8, 1], ['iceBlock', 0.6, 1], ['snowflake', 1.2, 0], ['lanternBlue', 0.2, 1]], npcs: [], foes: ['c_ghost', 'c_ghost', 'c_bat'],
+    parts: ['snow', 'shard'], amb: [0.42, 0.48, 0.6], fx: { mono: 0.25 } },
+   { name: 'frost2', floor: ['#e4eef6', '#c8d8e8', '#8ccaf0'], pat: 'checker', light: 0.5, wallBg: '#5a94c0', wall: ['brickIce'], paint: [], centre: ['crystalBigLit'],
+    props: [['crystalIce', 0.8, 1], ['pineIce', 0.6, 1], ['snowflake', 1.4, 0], ['grave', 0.3, 1]], npcs: [], foes: ['c_ghost', 'c_ghost', 'c_shadow'],
+    parts: ['snow', 'star'], amb: [0.58, 0.6, 0.66], fx: { warp: 0.4 } }],
+  [{ name: 'ember', floor: ['#2a1410', '#3a1a10', '#5a2a14'], pat: 'bands', wallBg: '#140806', wall: ['brickRed'], paint: [], centre: ['fireShrine'],
+    props: [['vent', 0.6, 1], ['rockObsidian', 0.6, 1], ['lavaLit', 0.25, 1], ['skullBone', 0.5, 0]], npcs: [], foes: ['c_dragon', 'c_bat', 'c_bat'],
+    parts: ['ember', 'ash'], amb: [0.5, 0.34, 0.28], fx: { warp: 0.6 } },
+   { name: 'ember2', floor: ['#3a0a08', '#5a1a0c', '#ff7a1a'], pat: 'caustic', wallBg: '#1a0604', wall: ['brickOrange'], paint: [], centre: ['obelisk'],
+    props: [['brazier', 0.4, 1], ['vent', 0.7, 1], ['peakBasalt', 0.4, 1], ['skullBone', 0.6, 0]], npcs: [], foes: ['c_dragon', 'c_dragon', 'c_bat'],
+    parts: ['ember'], amb: [0.55, 0.36, 0.3], fx: { warp: 1 } }],
+  [{ name: 'gridlock', floor: ['#16161e', '#1e1e28', '#2a2a44', '#8a7a30'], pat: 'asphalt', wallBg: '#0a0a14', wall: ['brickDark'], paint: [], centre: ['phoneBox'],
+    props: [['cone', 1, 1], ['vending', 0.4, 1], ['streetLamp', 0.4, 1], ['barrel', 0.5, 1]], npcs: [], foes: ['c_commuter', 'c_phone', 'c_trash', 'c_cone'],
+    parts: ['rain'], amb: [0.42, 0.42, 0.48], fx: { ca: 1 } },
+   { name: 'gridlock2', floor: ['#c84aa8', '#3ab8c8', '#16161e'], pat: 'checker', wallBg: '#1a0a2a', wall: ['neonWall', 'neonWallCyan'], paint: ['pSunset'], centre: ['bust'],
+    props: [['cone', 0.8, 1], ['vendingRed', 0.4, 1], ['tvStatic', 0.4, 1], ['streetLamp', 0.3, 1]], npcs: [], foes: ['c_trash', 'c_cart', 'c_paparazzi', 'c_roomba'],
+    parts: ['star', 'confettiY'], amb: [0.46, 0.4, 0.52], fx: { hue: 0.15 } }],
+];
+
+function applyDream(m, ent, seed, theme) {
+  const T = theme || dreamTheme(ent);
   const R = mulberry32((seed ^ 0x5bd1e995) >>> 0);
   const W = m.w, H = m.h, N = W * H;
   const floor = new Uint8Array(N);
@@ -541,9 +577,9 @@ function applyDream(m, ent, seed) {
 
   // dream-dwellers replace the usual wildlife
   m.creatures = [];
-  spawnInteriorCreatures(m, R, T.npcs, Math.min(12, 2 + Math.round(floorCount / 160)));
+  if (T.npcs.length) spawnInteriorCreatures(m, R, T.npcs, Math.min(12, 2 + Math.round(floorCount / 160)));
   for (const c of m.creatures) c.speed *= 0.6;
-  const foes = THEME_FOES[T.name];
+  const foes = T.foes || THEME_FOES[T.name];
   if (foes && foes.length) spawnInteriorCreatures(m, R, foes, Math.min(10, 2 + Math.round(floorCount / 200)));
 
   if (T.amb) m.ambient = T.amb.slice();

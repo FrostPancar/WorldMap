@@ -18,7 +18,7 @@ function updateCreature(c, m, dt, pl) {
   if (c.npc) { c.px = c.x * TS; c.py = c.y * TS; return; } // traders stay at their post
   if (c.carried) return; // lifted by your wings: it goes where you go
   // a world boss fights you near its lair and walks home when you leave
-  const away = c.home && Math.abs(pl.x - c.home.x) + Math.abs(pl.y - c.home.y) > WorldBosses.AGGRO;
+  const away = c.home && Math.abs(pl.x - c.home.x) + Math.abs(pl.y - c.home.y) > (c.aggro || WorldBosses.AGGRO);
   const gx = away ? c.home.x : pl.x, gy = away ? c.home.y : pl.y;
   const pdx = gx - c.x, pdy = gy - c.y, pd = Math.abs(pdx) + Math.abs(pdy);
   // bosses always hunt you; other enemies lose you while you wear a possessed body

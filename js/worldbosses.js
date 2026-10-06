@@ -165,15 +165,34 @@ WORLD_BOSSES.forEach((b, i) => {
   SHOTS['wl' + i] = { lob: true, dmg: 2, cd: 0, range: 12, col: b.col };
 });
 
-// boot: put each undefeated boss in its lair (lairs are made by genOverworld)
-function seedWorldBosses(world) {
-  const m = world.map;
-  for (const p of world.pois) {
-    if (p.type !== 'lair' || Combat.worldDown.has(p.lair)) continue;
-    const B = WORLD_BOSSES[p.lair], c = makeCreature(B.g, p.x, p.y, -1, mulberry32(p.x * 31 + p.y));
-    c.boss = B; c.r = 15; c.home = { x: p.x, y: p.y }; c.atkCd = 2; c.mi = 0; c.wait = 1;
+// Each lair is a themed building out in the boss's biome. Inside are two
+// dreamlike floors of that biome (see LAIR_THEMES in js/dreams.js), then the
+// boss's hall.
+const LAIR_GATE_COLS = [
+  ['#2a3a30', '#14201a', '#05080a', '#ff5a50'], ['#5a7a2a', '#3a2a4a', '#05080a', '#4ae8e0'], ['#8ccaf0', '#5a94c0', '#0a1420', '#7af0ff'],
+  ['#4a3434', '#2a1a1a', '#0a0404', '#ff7a1a'], ['#3a3a4a', '#24242e', '#05050a', '#f0c030'],
+];
+LAIR_GATE_COLS.forEach((cols, k) => {
+  defGlyph('lairGate' + k, rowsFrom(16, 16, (x, y) => {
+    if (y < 4) return ((x === 3 || x === 12) && y >= 2) || ((x === 7 || x === 8) && y >= 0) ? '1' : '';
+    if (x < 1 || x > 14) return '';
+    if ((y >= 9 && x >= 5 && x <= 10) || (y === 8 && x >= 6 && x <= 9)) return '3';  // the dark doorway
+    if ((y === 5 || y === 6) && (x === 7 || x === 8)) return '4';                     // a glowing sigil
+    if (x === 1 || x === 14 || y === 4) return '2';
+    return (y % 3 === 0 && (x + y) % 4 === 0) ? '2' : '1';
+  }), cols, { emit: [4], light: { c: cols[3], r: 40, i: 0.9, f: 0.2, ox: 8, oy: -2 } });
+});
+function genLairArena(seed, ent) {
+  const k = ent.poi.lair, B = WORLD_BOSSES[k], T = LAIR_THEMES[k][1];
+  const { m, cx, cy, R } = arenaRoom(seed, { floor: T.floor.slice(0, 3), wallBg: T.wallBg, wall: T.wall[0], torch: B.light, amb: T.amb }, 52, 42);
+  if (!Combat.worldDown.has(k)) {
+    const c = makeCreature(B.g, cx, cy - 4, -1, R);
+    c.boss = B; c.r = 15; c.home = { x: cx, y: cy - 4 }; c.aggro = 60; c.atkCd = 2.5; c.mi = 0; c.wait = 1;
     m.creatures.push(c);
   }
+  m.dream = { name: 'lair', parts: T.parts, fx: T.fx, light: 1.1 };
+  m.finalize();
+  return m;
 }
 
 const WorldBosses = {
@@ -183,7 +202,7 @@ const WorldBosses = {
   // --- per boss (only where we run the enemies) ----------------------------------------
   tick(c, dt) {
     const B = c.boss, cx = c.px + 4, cy = c.py + 4, p = game.player;
-    const near = Math.abs(p.x - c.home.x) + Math.abs(p.y - c.home.y) <= this.AGGRO + 4;
+    const near = Math.abs(p.x - c.home.x) + Math.abs(p.y - c.home.y) <= (c.aggro || this.AGGRO) + 4;
     // the queue runs the steps of a pattern already started
     if (c.q && c.q.length) {
       for (const s of c.q) s.t -= dt;

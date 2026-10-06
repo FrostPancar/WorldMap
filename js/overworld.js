@@ -766,8 +766,8 @@ function genOverworld(seed) {
     }
   }
 
-  // five world-boss lairs, each in its boss's home biome: a wide clearing
-  // ringed with themed stones and lights, away from the middle of the map
+  // five world-boss lairs, each in its boss's home biome: a themed building
+  // in a clearing ringed with stones and lights, away from the middle of the map
   {
     const RL = mulberry32((seed ^ 0x1a12b055) >>> 0);
     WORLD_BOSSES.forEach((WB, k) => {
@@ -796,6 +796,8 @@ function genOverworld(seed) {
         }
         const poi = { type: 'lair', x: cx, y: cy, hub: { x: cx, y: cy + 8 }, lair: k };
         pois.push(poi);
+        structure(cx, cy, 'lairGate' + k, 2, 2);
+        addEntrance([[cx, cy], [cx + 1, cy]], 'lair', { x: cx, y: cy + 1 }, poi);
         const hi = poi.hub.y * W + poi.hub.x;
         m.glyph[hi] = 0; solid[hi] = 0;
         break;
