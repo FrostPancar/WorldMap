@@ -45,6 +45,12 @@ const Coop = {
     e.moving = !!s.m; e.where = s.w; e.seen = performance.now();
     e.ch = Number.isInteger(s.ch) && s.ch >= 0 && s.ch < CHARS.length ? s.ch : 0;
     if (Number.isInteger(s.co) && s.co >= 0 && s.co < SCARVES.length) e.c = s.co;
+    e.pk = typeof s.pk === 'string' && POWERS[s.pk] ? s.pk : 'spark';
+    e.cg = typeof s.cg === 'number' ? clamp(s.cg, 0, 1) : 0;
+    if (s.bm && typeof s.bm.s === 'number' && s.bm.s !== e.bms) {
+      e.bms = s.bm.s;
+      if (e.where === this.where()) Powers.remoteBeam(e, s.bm);
+    }
     CoopUI.refresh();
   },
   drop(id) { if (this.peers.delete(id)) CoopUI.refresh(); },
@@ -98,7 +104,7 @@ const Coop = {
     const up = this.links && this.links.some((l) => l.ready);
     this.room = up ? true : null;
     this.status = up ? 'joined' : (this.status === 'offline' ? 'offline' : 'connecting');
-    if (up) this.lastSent = 0; // announce ourselves right away
+    if (up) { this.lastSent = 0; Sound.sfx('join'); } // announce ourselves right away
     CoopUI.refresh();
   },
   onMsg(text) {
@@ -114,8 +120,11 @@ const Coop = {
   where() { return game.ret ? 'i' + game.ret.id : 'o'; },
   update(dt, p) {
     if (this.sendFn) {
-      const st = { px: Math.round(p.px), py: Math.round(p.py), f: p.face, m: p.moving ? 1 : 0, w: this.where(), ch: this.look.ch, co: this.myColor() };
-      const key = `${st.px},${st.py},${st.f},${st.m},${st.w},${st.ch},${st.co}`;
+      const st = { px: Math.round(p.px), py: Math.round(p.py), f: p.face, m: p.moving ? 1 : 0, w: this.where(), ch: this.look.ch, co: this.myColor(),
+        pk: Powers.kind, cg: Powers.charging ? Math.round(Powers.charge * 10) / 10 : 0 };
+      const lb = Powers.lastBeam;
+      if (lb && performance.now() - lb.t < 900) st.bm = { s: lb.s, a: lb.a, c: lb.c };
+      const key = `${st.px},${st.py},${st.f},${st.m},${st.w},${st.ch},${st.co},${st.pk},${st.cg},${st.bm ? st.bm.s : 0}`;
       const now = performance.now();
       // send on change (capped ~30/s), plus a keepalive every 2s
       if ((key !== this.last && now - this.lastSent > 66) || now - this.lastSent > 2000) {
@@ -189,6 +198,7 @@ const CoopUI = {
     panel.innerHTML = `<label>Character</label><div class="grid" id="coop-chars"></div><div class="sw" id="coop-cols"></div>
       <label for="coop-code">Room</label><input id="coop-code" maxlength="24" spellcheck="false" autocomplete="off">
       <div class="row"><button id="coop-join">Join</button><button id="coop-copy">Copy link</button></div>
+      <div class="row" style="margin-top:6px"><button id="coop-sound"></button></div>
       <div id="coop-status"><i></i><span></span></div>`;
     document.body.append(btn, panel);
     this.btn = btn; this.panel = panel;
@@ -206,6 +216,10 @@ const CoopUI = {
       panel.classList.remove('open'); document.getElementById('cvs').focus();
     };
     panel.querySelector('#coop-join').onclick = join;
+    const snd = panel.querySelector('#coop-sound');
+    const sndLabel = () => { snd.textContent = Sound.enabled ? 'Sound: on' : 'Sound: off'; };
+    sndLabel();
+    snd.onclick = () => { Sound.start(); Sound.setEnabled(!Sound.enabled); sndLabel(); Sound.sfx('ui'); };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); if (e.key === 'Escape') this.toggle(false); e.stopPropagation(); });
     input.addEventListener('keyup', (e) => e.stopPropagation());
     panel.querySelector('#coop-copy').onclick = (e) => {

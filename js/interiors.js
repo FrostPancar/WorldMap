@@ -28,6 +28,7 @@ function genInterior(ent) {
     default: m = genCave(seed, false, null, depth);
   }
   applyDream(m, ent, seed);
+  seedInteriorOrb(m, m.dream.name, seed);
   m.finalize();
   if (depth) m.ambient = m.ambient.map((a) => a * Math.pow(0.8, depth));
   if (DEEP[ent.type] && depth < DEEP_MAX) addStairsDown(m, ent, depth, seed);

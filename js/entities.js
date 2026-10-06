@@ -98,13 +98,13 @@ const PK = {
   ash: { c: '#6a5a5a', emit: 0 },
   petal: { c: '#ffb8d0', emit: 0.3 }, confettiR: { c: '#ff4a6a', emit: 0.4 }, confettiY: { c: '#ffe04a', emit: 0.4 },
   confettiB: { c: '#4ad8ff', emit: 0.4 }, star: { c: '#fff6a0', emit: 1 }, gold: { c: '#f0c040', emit: 1 },
-  rain: { c: '#6a8ad8', emit: 0.3 }, bubbleUp: { c: '#8ad8ff', emit: 0.6 }, shard: { c: '#d8b0ff', emit: 1 }, leafA: { c: '#e07a28', emit: 0.2 },
+  rain: { c: '#6a8ad8', emit: 0.3 }, beamSpark: { c: '#ffffff', emit: 1 }, bubbleUp: { c: '#8ad8ff', emit: 0.6 }, shard: { c: '#d8b0ff', emit: 1 }, leafA: { c: '#e07a28', emit: 0.2 },
 };
 const particles = [];
 
-function spawnParticle(kind, x, y, vx, vy, life) {
+function spawnParticle(kind, x, y, vx, vy, life, col) {
   if (particles.length > 700) return;
-  particles.push({ k: kind, x, y, vx, vy, life, max: life, ph: Math.random() * 10 });
+  particles.push({ k: kind, x, y, vx, vy, life, max: life, ph: Math.random() * 10, col });
 }
 
 function updateParticles(dt) {
@@ -121,6 +121,7 @@ function updateParticles(dt) {
       case 'snow': case 'leaf': case 'leafA': case 'ash': case 'petal': case 'confettiR': case 'confettiY': case 'confettiB': case 'bubbleUp':
         p.vx = Math.sin(p.ph + p.life * 2) * 8 + (p.k === 'leaf' || p.k === 'leafA' ? 6 : 0); break;
       case 'drip': p.vy += 120 * dt; break;
+      case 'beamSpark': p.vx *= 0.9; p.vy *= 0.9; break;
     }
     p.x += p.vx * dt; p.y += p.vy * dt;
   }
@@ -135,8 +136,9 @@ function drawParticles(sctx, ectx, ox, oy, W, H, time) {
     if (p.k === 'firefly') a *= 0.35 + 0.65 * Math.max(0, Math.sin(time * 3 + p.ph));
     if (p.k === 'sparkle' || p.k === 'twinkle' || p.k === 'shard' || p.k === 'star' || p.k === 'gold') a *= Math.sin((1 - p.life / p.max) * Math.PI);
     if (a <= 0.02) continue;
-    sctx.globalAlpha = a; sctx.fillStyle = def.c; sctx.fillRect(x, y, 1, 1);
-    if (def.emit) { ectx.globalAlpha = a * def.emit; ectx.fillStyle = def.c; ectx.fillRect(x, y, 1, 1); }
+    const c = p.col || def.c;
+    sctx.globalAlpha = a; sctx.fillStyle = c; sctx.fillRect(x, y, 1, 1);
+    if (def.emit) { ectx.globalAlpha = a * def.emit; ectx.fillStyle = c; ectx.fillRect(x, y, 1, 1); }
   }
   sctx.globalAlpha = 1; ectx.globalAlpha = 1;
 }

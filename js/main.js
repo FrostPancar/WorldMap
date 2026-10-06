@@ -86,6 +86,7 @@ function fadeTo(fn, speed) {
 }
 function toggleMap() {
   if (game.pending) return;
+  Sound.sfx('map');
   fadeTo(() => {
     if (game.mode === 'map') game.mode = 'world';
     else { game.mode = 'map'; MapView.open(game.player); }
@@ -95,6 +96,7 @@ function toggleMap() {
 }
 // game.stack holds where to return to for every level we have gone down.
 function enterInterior(ent) {
+  Sound.sfx('enter');
   const p = game.player;
   const back = { map: game.map, x: ent.ret ? ent.ret.x : p.fx, y: ent.ret ? ent.ret.y : p.fy, ent: game.ret };
   fadeTo(() => {
@@ -109,6 +111,7 @@ function enterInterior(ent) {
   });
 }
 function exitInterior() {
+  Sound.sfx('exit');
   fadeTo(() => {
     const back = game.stack.pop() || { map: game.world.map, x: game.world.start.x, y: game.world.start.y, ent: null };
     game.map = back.map; game.ret = back.ent;
@@ -160,6 +163,7 @@ function dayState(t) {
 // --- update ---------------------------------------------------------------------------
 function update(dt) {
   game.time += dt;
+  Sound.update();
   game.day = (game.day + dt / 360) % 1;
   if (Coop.room) game.day = (Date.now() / 1000 / 360 + 0.79) % 1;
   if (game.fadeDir) {
@@ -185,9 +189,11 @@ function update(dt) {
     if (m === game.world.map) MapView.reveal(p.x, p.y, 13);
     const e = m.entr.get(p.y * m.w + p.x);
     if (e) { if (e.exit) exitInterior(); else enterInterior(e); }
+    Sound.stepSound(m === game.world.map ? m.biome[p.y * m.w + p.x] : -1);
     for (let k = 0; k < 2; k++) spawnParticle('step', p.x * TS + 2 + Math.random() * 4, p.y * TS + 7, (Math.random() - 0.5) * 6, -2 - Math.random() * 3, 0.35);
   }
   Coop.update(dt, p);
+  Powers.update(dt);
   const lim = 44;
   for (const c of m.creatures) {
     if (Math.abs(c.x - p.x) > lim || Math.abs(c.y - p.y) > lim) continue;
@@ -286,9 +292,10 @@ function render() {
 function renderWorld(S, L, E, P) {
   const v = game.view, m = game.map, p = game.player, t = game.time;
   const over = m === game.world.map;
-  const ix = Math.floor(game.camX), iy = Math.floor(game.camY);
+  const [shx, shy] = Powers.shakeOffset();
+  const ix = Math.floor(game.camX + shx), iy = Math.floor(game.camY + shy);
   const ox = ix - 1, oy = iy - 1;
-  P.fracX = game.camX - ix; P.fracY = game.camY - iy;
+  P.fracX = game.camX + shx - ix; P.fracY = game.camY + shy - iy;
   P.camX = ((ox % 4) + 4) % 4; P.camY = ((oy % 4) + 4) % 4;
 
   S.fillStyle = m.voidColor; S.fillRect(0, 0, v.SW, v.SH);
@@ -329,6 +336,7 @@ function renderWorld(S, L, E, P) {
     const fr = c.moving ? Math.floor(c.t * 2) % 2 : (Math.sin(t * 2 + c.ph) > 0.85 ? 1 : 0);
     S.drawImage(spr(c.g, fr, c.flip), px, py);
     if (d.emit) { E.globalAlpha = 0.6; E.drawImage(spr(c.g, fr, c.flip, true), px, py); E.globalAlpha = 1; }
+    if (c.flash > 0) { E.globalAlpha = Math.min(1, c.flash * 2); E.drawImage(spr(c.g, fr, c.flip), px, py); E.globalAlpha = 1; }
   }
   // co-op friends on this map
   const friends = Coop.here();
@@ -346,6 +354,7 @@ function renderWorld(S, L, E, P) {
   S.drawImage(spr(pg, pf, pflip), ppx, ppy);
   E.globalAlpha = 0.22; E.drawImage(spr(pg, pf, pflip), ppx, ppy); E.globalAlpha = 1;
 
+  Powers.render(S, E, ox, oy, v.SW, v.SH, t);
   drawParticles(S, E, ox, oy, v.SW, v.SH, t);
 
   // lighting
@@ -381,6 +390,7 @@ function renderWorld(S, L, E, P) {
   }
   // the player carries a soft glow
   drawLight(p.px + 4, p.py + 4, [190, 220, 255], over ? 46 : 52, over ? 0.9 * (1 - day * 0.8) : 1.1 * lightK);
+  for (const l of Powers.lights) drawLight(l.x, l.y, l.rgb, l.r, l.i);
   for (const f of friends) drawLight(f.px + 4, f.py + 4, [190, 220, 255], over ? 46 : 52, over ? 0.9 * (1 - day * 0.8) : 1.1 * lightK);
   L.globalAlpha = 1; L.globalCompositeOperation = 'source-over';
 }
@@ -402,6 +412,7 @@ function boot() {
   game.world = genOverworld(seed);
   game.map = game.world.map;
   MapView.init(game.world);
+  seedOverworldOrbs(game.world, seed);
   game.player.place(game.world.start.x, game.world.start.y);
   MapView.reveal(game.player.x, game.player.y, 13);
   snapCamera();

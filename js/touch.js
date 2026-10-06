@@ -25,6 +25,10 @@ const Touch = {
       .tbtn.on{background:#f2f0e8;color:#0b0b10}
       #t-run{right:calc(20px + env(safe-area-inset-right));bottom:calc(22px + env(safe-area-inset-bottom))}
       #t-map{right:calc(30px + var(--btn) + env(safe-area-inset-right));bottom:calc(22px + var(--btn) * .7 + env(safe-area-inset-bottom))}
+      #t-beam{right:calc(20px + env(safe-area-inset-right));bottom:calc(32px + var(--btn) + env(safe-area-inset-bottom));
+        font-size:calc(var(--btn)*.42);color:#9ad8ff;border-color:#9ad8ff55}
+      #t-beam.on{background:#9ad8ff;color:#0b0b10}
+      body.touch.mapmode #t-beam{display:none}
       #t-zin,#t-zout{display:none}
       body.touch.mapmode #t-zin,body.touch.mapmode #t-zout{display:flex}
       body.touch.mapmode #t-run,body.touch.mapmode #dpad{display:none}
@@ -39,7 +43,7 @@ const Touch = {
     const root = document.createElement('div');
     root.id = 'touch';
     root.innerHTML = `<div id="dpad"><i class="up">▲</i><i class="down">▼</i><i class="left">◀</i><i class="right">▶</i></div>
-      <div class="tbtn" id="t-run">RUN</div><div class="tbtn" id="t-map">MAP</div>
+      <div class="tbtn" id="t-beam">✦</div><div class="tbtn" id="t-run">RUN</div><div class="tbtn" id="t-map">MAP</div>
       <div class="tbtn" id="t-zin">+</div><div class="tbtn" id="t-zout">−</div>`;
     document.body.appendChild(root);
     this.pad = root.querySelector('#dpad');
@@ -65,6 +69,10 @@ const Touch = {
     run.addEventListener('pointerdown', (e) => { e.preventDefault(); input.touchRun = !input.touchRun; run.classList.toggle('on', input.touchRun); });
     const tap = (id, fn) => root.querySelector(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
     tap('#t-map', () => toggleMap());
+    const beam = root.querySelector('#t-beam');
+    beam.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); beam.classList.add('on'); Powers.startCharge(null); });
+    const fire = () => { beam.classList.remove('on'); Powers.release(); };
+    beam.addEventListener('pointerup', fire); beam.addEventListener('pointercancel', fire); beam.addEventListener('pointerleave', fire);
     tap('#t-zin', () => MapView.zoomBy(1));
     tap('#t-zout', () => MapView.zoomBy(-1));
 
