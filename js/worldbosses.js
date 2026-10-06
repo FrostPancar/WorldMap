@@ -328,8 +328,11 @@ const WorldBosses = {
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const d = this.drops[i];
       d.t += dt;
-      if (d.map !== game.map || d.t < 1) continue;
-      if (Math.hypot(px - d.x * TS - 4, py - d.y * TS - 4) < 8) { this.drops.splice(i, 1); this.gain(d.k); }
+      if (d.map !== game.map || d.t < 1.2) continue;
+      // after a moment the crystal floats over to you, wherever you are
+      const dx = px - d.x, dy = py - d.y, dd = Math.hypot(dx, dy), sp = Math.min(dd, (60 + d.t * 60) * dt);
+      if (dd < 6) { this.drops.splice(i, 1); this.gain(d.k); continue; }
+      d.x += dx / dd * sp; d.y += dy / dd * sp;
     }
   },
   gain(k) {
@@ -349,7 +352,7 @@ const WorldBosses = {
     for (const q of m.creatures) if (q.minion && !q.dead) Combat.kill(q);
     this.marks.length = 0;
     Combat.say(B.name + ' DEFEATED');
-    this.drops.push({ x: c.x, y: c.y, k: B.i, map: m, t: 0 });
+    this.drops.push({ x: c.px + 4, y: c.py + 4, k: B.i, map: m, t: 0 });
     m.items = m.items || [];
     const spot = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dy]) => !m.blocked(c.x + dx, c.y + dy));
     if (spot) m.items.push({ x: c.x + spot[0], y: c.y + spot[1], id: pickItem([], Math.random()), pop: 0.8 });
@@ -377,11 +380,11 @@ const WorldBosses = {
     }
     for (const d of this.drops) {
       if (d.map !== game.map) continue;
-      const C = CRYSTALS[d.k], x = Math.round(d.x * TS - ox), y = Math.round(d.y * TS - oy - 6 + Math.sin(t * 2.5) * 2);
+      const C = CRYSTALS[d.k], x = Math.round(d.x - 4 - ox), y = Math.round(d.y - 10 - oy + Math.sin(t * 2.5) * 2);
       S.globalAlpha = 1; E.globalAlpha = 1;
       S.drawImage(spr(C.g, 0, false), x, y); E.drawImage(spr(C.g, 0, false), x, y);
-      L.push({ x: d.x * TS + 4, y: d.y * TS, rgb: C.rgb, r: 40, i: 1.2 + Math.sin(t * 4) * 0.3 });
-      if (Math.random() < 0.3) spawnParticle('beamSpark', d.x * TS + 4 + (Math.random() - 0.5) * 8, d.y * TS + 2, 0, -15, 0.6, C.col);
+      L.push({ x: d.x, y: d.y - 4, rgb: C.rgb, r: 40, i: 1.2 + Math.sin(t * 4) * 0.3 });
+      if (Math.random() < 0.3) spawnParticle('beamSpark', d.x + (Math.random() - 0.5) * 8, d.y - 2, 0, -15, 0.6, C.col);
     }
     S.globalAlpha = 1; E.globalAlpha = 1;
   },

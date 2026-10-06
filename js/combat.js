@@ -158,8 +158,8 @@ const Combat = {
   },
   attack(aim) {
     if (game.mode !== 'world' || game.pending || this.cd > 0) return;
-    if (Powers.possess) { Powers.endPossess(); this.cd = 0.3; return; } // attacking bursts you out of a possessed body
     const it = this.item(), p = game.player, x0 = p.px + 4, y0 = p.py + 4;
+    if (Powers.possess) { this.bodyAttack(aim, x0, y0); return; }
     if (!aim) {
       const e = this.nearestEnemy(x0, y0, 90);
       aim = e ? { x: e.px + 4, y: e.py + 4 } : null;
@@ -169,6 +169,38 @@ const Combat = {
     this.cd = it.cd * (this.has(4) ? 0.85 : 1);
     this.fire(it, x0, y0, a, aim, 'player');
     this.atkEvt = { s: this.seq++, id: this.inv[this.eq], a: Math.round(a * 100) / 100, d: aim ? Math.round(Math.hypot(aim.x - x0, aim.y - y0)) : 56 };
+  },
+  // while shadow-stepped into a creature you fight with its body: creatures
+  // that shoot fire their own kind of shot, everything else lunges and bites
+  bodyAttack(aim, x0, y0) {
+    const c = Powers.possess.c, p = game.player;
+    this.ensure(c);
+    if (!aim) { const e = this.nearestEnemy(x0, y0, 90); aim = e ? { x: e.px + 4, y: e.py + 4 } : null; }
+    const a = aim ? Math.atan2(aim.y - y0, aim.x - x0) : { up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0 }[p.face];
+    if (!p.moving) p.face = Math.abs(Math.cos(a)) > Math.abs(Math.sin(a)) ? (Math.cos(a) > 0 ? 'right' : 'left') : (Math.sin(a) > 0 ? 'down' : 'up');
+    const base = (c.def ? c.def.dmg + 1 : 1.5) * this.power(), shot = c.def && c.def.shot && SHOTS[c.def.shot];
+    if (shot && !shot.lob) {
+      this.cd = 0.4;
+      this.projectiles.push({ type: 'bullet', x: x0, y: y0, vx: Math.cos(a) * 220, vy: Math.sin(a) * 220, life: 0.6, el: 'void', dmg: base * 1.2,
+        owner: 'player', hit: new Set(), bounce: 0, pierce: false });
+      Sound.sfx('eshot');
+    } else if (shot) {
+      this.cd = 0.55;
+      const d = aim ? clamp(Math.hypot(aim.x - x0, aim.y - y0), 16, 80) : 56;
+      this.projectiles.push({ type: 'arc', x0, y0, x1: x0 + Math.cos(a) * d, y1: y0 + Math.sin(a) * d, x: x0, y: y0, t: 0, dur: 0.2 + d / 240, h: 6 + d * 0.15,
+        el: 'void', dmg: base * 1.5, owner: 'player', hit: new Set(), bounce: 0, pierce: false });
+      Sound.sfx('shot', 'sling');
+    } else {
+      this.cd = 0.35;
+      this.slashes.push({ x: x0, y: y0, a, reach: 13, life: 0.16, max: 0.16, el: 'void', owner: 'player' });
+      for (const e of game.map.creatures) {
+        if (!this.isEnemy(e)) continue;
+        const dx = e.px + 4 - x0, dy = e.py + 4 - y0, d = Math.hypot(dx, dy);
+        let da = Math.atan2(dy, dx) - a; da = Math.atan2(Math.sin(da), Math.cos(da));
+        if (d < 17 + (e.r ? e.r - 6 : 0) && Math.abs(da) < 1.3) this.damage(e, base * 1.6, 'void', a);
+      }
+      Sound.sfx('shot', 'sword');
+    }
   },
   fire(it, x0, y0, a, aim, owner) {
     const dmg = it.dmg * (owner === 'player' ? this.power() : 0.6), el = it.el, ca = Math.cos(a), sa = Math.sin(a);
@@ -266,7 +298,7 @@ const Combat = {
     const n = clamp(Math.ceil(c.maxhp / 2), 1, 24);
     for (let k = 0; k < n; k++) {
       const a = Math.random() * Math.PI * 2;
-      this.gems.push({ x, y, vx: Math.cos(a) * 40, vy: Math.sin(a) * 40, val: c.maxhp / n, map: m, t: 0 });
+      this.gems.push({ x, y, vx: Math.cos(a) * 40, vy: Math.sin(a) * 40, val: c.maxhp / n, map: m, t: 0, far: !!c.boss }); // a boss's gems find you anywhere
     }
     Sound.sfx('kill');
   },
@@ -437,20 +469,8 @@ const Combat = {
           c.pet = true; c.emote = 1.6; c.biome = -1;
           if (c.id !== undefined) { if (this.auth) { m.tamedIds = m.tamedIds || []; m.tamedIds.push(c.id); } else this.tameBuf.push(c.id); }
         }
-        if (c.pet) {
-          c.cd -= dt;
-          if (Math.random() < dt * 0.15) c.emote = 1;
-          if (c.cd <= 0) {
-            const e = this.nearestEnemy(cx, cy, 64);
-            if (e) {
-              c.cd = 1.1;
-              const it = this.item();
-              this.projectiles.push({ type: 'heart', x: cx, y: cy - 2, vx: 0, vy: 0, life: 2, home: true, el: it.el, dmg: Math.max(1, it.dmg * 0.6) * this.power(),
-                owner: 'pet', hit: new Set(), bounce: 0, pierce: false, spd: 140, tgt: e });
-              c.emote = 0.5;
-            } else c.cd = 0.4;
-          }
-        }
+        // pets are companions only: they follow you around but stay out of fights
+        if (c.pet && Math.random() < dt * 0.15) c.emote = 1;
       } else {
         c.cd -= dt;
         // a possessed body fools ordinary enemies, but not bosses
@@ -478,7 +498,7 @@ const Combat = {
       if (g.map !== m) { this.gems.splice(i, 1); continue; }
       g.t += dt;
       const dx = px - g.x, dy = py - g.y, d = Math.hypot(dx, dy);
-      if (g.t > 0.35 && d < 70) { const s = 220 / Math.max(d, 8); g.vx += dx * s * dt; g.vy += dy * s * dt; }
+      if (g.t > 0.35 && (d < 70 || g.far)) { const s = 220 / Math.max(d, 8); g.vx += dx * s * dt; g.vy += dy * s * dt; }
       g.vx *= 0.9; g.vy *= 0.9; g.x += g.vx * dt; g.y += g.vy * dt;
       if (d < 5 && g.t > 0.3) { this.gems.splice(i, 1); if (g.heal) { this.hp = Math.min(this.maxHp(), this.hp + g.heal); this.showHearts(); Sound.sfx('heart'); } else this.gainXp(g.val); }
     }

@@ -445,6 +445,9 @@ function renderWorld(S, L, E, P) {
     amb = m.ambient.map((a) => a < 0.56 ? a + (0.56 - a) * 0.6 : a);
     lightK = m.dream ? m.dream.light : 1;
   }
+  // in rooms that are already bright, lamps add far less so pale floors don't blow out
+  const ambAvg = (amb[0] + amb[1] + amb[2]) / 3, glowK = over ? 1 : clamp(1.35 - ambAvg * 1.35, 0.3, 1);
+  lightK *= glowK;
   P.amb = amb;
   L.globalCompositeOperation = 'source-over';
   L.fillStyle = `rgb(${amb[0] * 127.5 | 0},${amb[1] * 127.5 | 0},${amb[2] * 127.5 | 0})`;
@@ -469,7 +472,7 @@ function renderWorld(S, L, E, P) {
   }
   // the player carries a soft glow
   drawLight(p.px + 4, p.py + 4, [190, 220, 255], over ? 52 : 62, over ? 1 * (1 - day * 0.8) : 1.2 * lightK);
-  for (const l of Powers.lights) drawLight(l.x, l.y, l.rgb, l.r, l.i);
+  for (const l of Powers.lights) drawLight(l.x, l.y, l.rgb, l.r, l.i * glowK);
   for (const f of friends) drawLight(f.px + 4, f.py + 4, [190, 220, 255], over ? 46 : 52, over ? 0.9 * (1 - day * 0.8) : 1.1 * lightK);
   L.globalAlpha = 1; L.globalCompositeOperation = 'source-over';
 }
