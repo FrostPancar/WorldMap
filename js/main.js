@@ -512,4 +512,7 @@ function boot() {
   Coop.initArtifactRoom();
   requestAnimationFrame(frame);
 }
-requestAnimationFrame(() => setTimeout(boot, 30));
+// wait until every script has loaded: on a slow connection an early frame can
+// fire while later files (combat, bosses) are still downloading
+function startWhenLoaded() { requestAnimationFrame(() => setTimeout(boot, 30)); }
+if (document.readyState === 'complete') startWhenLoaded(); else addEventListener('load', startWhenLoaded, { once: true });

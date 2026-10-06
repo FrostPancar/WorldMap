@@ -137,14 +137,18 @@ const MapView = {
 
     // POI icons on discovered locations
     for (const p of pois) {
-      if (!this.seen[p.y * this.W + p.x]) continue;
+      // boss lairs and arenas are known from the start (in red) so you can set out for them
+      const boss = p.type === 'lair' || p.type === 'arena';
+      if (!boss && !this.seen[p.y * this.W + p.x]) continue;
       const icon = MAP_ICONS[p.type];
       if (!icon) continue;
+      const done = p.type === 'lair' ? Combat.worldDown.has(p.lair)
+        : p.type === 'arena' && game.world.entrances.some((e) => e.poi === p && Combat.bossDown.has(String(e.id)));
       const x = Math.round(p.x * z + z / 2 - ox) - 2, y = Math.round(p.y * z - oy) - 6;
       if (x < -8 || y < -8 || x > VW + 8 || y > VH + 8) continue;
       sctx.fillStyle = '#000'; sctx.fillRect(x - 1, y - 1, 7, 7);
       for (const ctx of [sctx, ectx]) {
-        ctx.fillStyle = ctx === sctx ? '#f2f0e8' : '#6a6a64';
+        ctx.fillStyle = ctx === sctx ? (boss && !done ? '#ff4a4a' : '#f2f0e8') : (boss && !done ? '#a02020' : '#6a6a64');
         for (let j = 0; j < 5; j++) for (let i = 0; i < 5; i++) if (icon[j][i] === '1') ctx.fillRect(x + i, y + j, 1, 1);
       }
     }
