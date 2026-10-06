@@ -299,15 +299,15 @@ function renderWorld(S, L, E, P) {
   // co-op friends on this map
   const friends = Coop.here();
   for (const f of friends) {
-    const [fg, ff, fflip] = Coop.sprite(f.face, f.moving ? Math.floor(f.animT * 9) % 2 : 0, f.c);
+    const [fg, ff, fflip] = Coop.sprite(f.face, f.moving ? Math.floor(f.animT * 9) % 2 : 0, f.c, f.ch || 0, f);
     const fx = Math.round(f.px - ox), fy = Math.round(f.py - oy);
     if (fx < -8 || fy < -8 || fx > v.SW || fy > v.SH) continue;
     S.drawImage(spr(fg, ff, fflip), fx, fy);
     E.globalAlpha = 0.22; E.drawImage(spr(fg, ff, fflip), fx, fy); E.globalAlpha = 1;
   }
   // player
-  let [pg, pf, pflip] = p.sprite();
-  if (Coop.room) [pg, pf, pflip] = Coop.sprite(p.face, pf, Coop.myColor());
+  const pf0 = p.sprite()[1];
+  const [pg, pf, pflip] = Coop.sprite(p.face, pf0, Coop.myColor(), Coop.look.ch, p);
   const ppx = Math.round(p.px - ox), ppy = Math.round(p.py - oy);
   S.drawImage(spr(pg, pf, pflip), ppx, ppy);
   E.globalAlpha = 0.22; E.drawImage(spr(pg, pf, pflip), ppx, ppy); E.globalAlpha = 1;

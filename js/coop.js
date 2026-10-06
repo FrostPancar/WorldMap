@@ -15,6 +15,11 @@ for (let k = 0; k < SCARVES.length; k++) {
   for (const n of ['p_down', 'p_up', 'p_side']) variant(`${n}_${k}`, n, ['#e8fff0', '#162030', SCARVES[k]]);
 }
 
+// Playable characters: the scarf creature plus the character-sheet critters,
+// each in every scarf colour.
+const CHARS = ['p', 'c_cat', 'c_rabbit', 'c_fox', 'c_frog', 'c_bear', 'c_octo', 'c_ghost', 'c_dragon', 'c_deer', 'c_bird', 'c_slime', 'c_lizard', 'c_bat'];
+for (let k = 0; k < SCARVES.length; k++) for (const n of CHARS.slice(1)) variant(`${n}_${k}`, n, [SCARVES[k], '#141420']);
+
 function hashStr(s) {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
@@ -29,6 +34,7 @@ const Coop = {
   sendFn: null,
   status: 'solo',      // solo | connecting | host | joined
   code: null,
+  look: (() => { try { const l = JSON.parse(localStorage.getItem('worldmap-look')); if (l && l.ch >= 0 && l.ch < CHARS.length) return l; } catch (e) { /* no storage */ } return { ch: 0, co: -1 }; })(),
 
   // --- shared peer table ----------------------------------------------------
   receive(id, s) {
@@ -39,6 +45,8 @@ const Coop = {
     if (e.where !== s.w) { e.px = s.px; e.py = s.py; }
     e.tx = s.px; e.ty = s.py; e.face = ['up', 'down', 'left', 'right'].indexOf(s.f) >= 0 ? s.f : 'down';
     e.moving = !!s.m; e.where = s.w; e.seen = performance.now();
+    e.ch = Number.isInteger(s.ch) && s.ch >= 0 && s.ch < CHARS.length ? s.ch : 0;
+    if (Number.isInteger(s.co) && s.co >= 0 && s.co < SCARVES.length) e.c = s.co;
     CoopUI.refresh();
   },
   drop(id) { if (this.peers.delete(id)) CoopUI.refresh(); },
@@ -161,8 +169,8 @@ const Coop = {
   where() { return game.ret ? 'i' + game.ret.id : 'o'; },
   update(dt, p) {
     if (this.sendFn) {
-      const st = { px: Math.round(p.px), py: Math.round(p.py), f: p.face, m: p.moving ? 1 : 0, w: this.where() };
-      const key = `${st.px},${st.py},${st.f},${st.m},${st.w}`;
+      const st = { px: Math.round(p.px), py: Math.round(p.py), f: p.face, m: p.moving ? 1 : 0, w: this.where(), ch: this.look.ch, co: this.myColor() };
+      const key = `${st.px},${st.py},${st.f},${st.m},${st.w},${st.ch},${st.co}`;
       const now = performance.now();
       // send on change (capped ~30/s), plus a keepalive every 2s
       if ((key !== this.last && now - this.lastSent > 33) || now - this.lastSent > 2000) {
@@ -177,8 +185,17 @@ const Coop = {
       e.animT = e.moving ? (e.animT || 0) + dt : 0;
     }
   },
-  myColor() { return this.self ? Math.abs(hashStr(this.self)) % SCARVES.length : 0; },
-  sprite(face, frame, c) {
+  myColor() {
+    if (this.look.co >= 0 && this.look.co < SCARVES.length) return this.look.co;
+    return this.self ? Math.abs(hashStr(this.self)) % SCARVES.length : 0;
+  },
+  // ent remembers the last horizontal facing for side-only critter sprites
+  sprite(face, frame, c, ch, ent) {
+    if (ch) {
+      const flip = face === 'left' ? true : face === 'right' ? false : !!(ent && ent.hflip);
+      if (ent) ent.hflip = flip;
+      return [G[`${CHARS[ch]}_${c}`], frame, flip];
+    }
     if (face === 'up') return [G['p_up_' + c], frame, false];
     if (face === 'down') return [G['p_down_' + c], frame, false];
     return [G['p_side_' + c], frame, face === 'left'];
@@ -212,13 +229,20 @@ const CoopUI = {
       #coop-panel button{flex:1;background:#1a1a24;border:1px solid #3a3a46;color:#f2f0e8;font:12px monospace;padding:6px;border-radius:4px;cursor:pointer}
       #coop-panel button:hover{border-color:#8a8a96}
       #coop-status{margin-top:8px;color:#8a8a96;display:flex;align-items:center;gap:6px}
+      #coop-panel .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px}
+      #coop-panel .grid canvas{display:block;width:100%;height:auto;aspect-ratio:1;image-rendering:pixelated;background:#000;border:1px solid #2a2a34;border-radius:3px;cursor:pointer;box-sizing:border-box;padding:3px}
+      #coop-panel .grid canvas.on{border-color:#f2f0e8}
+      #coop-panel .sw{display:flex;gap:4px;margin-bottom:10px}
+      #coop-panel .sw span{flex:1;height:14px;border-radius:3px;cursor:pointer;border:1px solid transparent}
+      #coop-panel .sw span.on{border-color:#f2f0e8}
       #coop-status i{width:7px;height:7px;border-radius:50%;background:#555;display:inline-block}`;
     document.head.appendChild(css);
     const btn = document.createElement('button');
     btn.id = 'coop-btn'; btn.title = 'Co-op'; btn.innerHTML = '&#9881;<span class="dot"></span>';
     const panel = document.createElement('div');
     panel.id = 'coop-panel';
-    panel.innerHTML = `<label for="coop-code">Room</label><input id="coop-code" maxlength="24" spellcheck="false" autocomplete="off">
+    panel.innerHTML = `<label>Character</label><div class="grid" id="coop-chars"></div><div class="sw" id="coop-cols"></div>
+      <label for="coop-code">Room</label><input id="coop-code" maxlength="24" spellcheck="false" autocomplete="off">
       <div class="row"><button id="coop-join">Join</button><button id="coop-copy">Copy link</button></div>
       <div id="coop-status"><i></i><span></span></div>`;
     document.body.append(btn, panel);
@@ -227,6 +251,7 @@ const CoopUI = {
     const q = new URLSearchParams(location.search);
     input.value = q.get('room') || Math.random().toString(36).slice(2, 7);
     btn.onclick = () => this.toggle();
+    this.buildPicker();
     const join = () => {
       const code = input.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
       if (!code) return;
@@ -249,6 +274,30 @@ const CoopUI = {
     if (q.get('room')) Coop.join(input.value.trim().toLowerCase(), seed);
     this.refresh();
   },
+  buildPicker() {
+    const grid = this.panel.querySelector('#coop-chars'), cols = this.panel.querySelector('#coop-cols');
+    grid.innerHTML = ''; cols.innerHTML = '';
+    const c = Coop.myColor();
+    CHARS.forEach((n, i) => {
+      const cv = document.createElement('canvas'); cv.width = 8; cv.height = 8;
+      cv.getContext('2d').drawImage(spr(i ? G[`${n}_${c}`] : G['p_down_' + c], 0, false), 0, 0);
+      if (i === Coop.look.ch) cv.className = 'on';
+      cv.onclick = () => this.setLook({ ch: i });
+      grid.appendChild(cv);
+    });
+    SCARVES.forEach((col, k) => {
+      const sp = document.createElement('span'); sp.style.background = col;
+      if (k === c) sp.className = 'on';
+      sp.onclick = () => this.setLook({ co: k });
+      cols.appendChild(sp);
+    });
+  },
+  setLook(patch) {
+    if (patch.co !== undefined && Coop.look.co < 0) Coop.look.co = Coop.myColor();
+    Object.assign(Coop.look, patch);
+    try { localStorage.setItem('worldmap-look', JSON.stringify(Coop.look)); } catch (e) { /* no storage */ }
+    this.buildPicker();
+  },
   toggle(open) {
     const p = this.panel;
     if (!p || this.btn.style.display === 'none') return;
@@ -259,6 +308,7 @@ const CoopUI = {
   go(code, seed) { location.search = `?room=${code}&seed=${seed}`; },
   refresh() {
     if (!this.panel) return;
+    if (Coop.self !== this.pickerSelf) { this.pickerSelf = Coop.self; this.buildPicker(); }
     const n = Coop.peers.size + 1;
     const [col, text] = {
       solo: ['#555', 'Solo — pick a room and join'],

@@ -152,7 +152,7 @@ const MapView = {
     const px = Math.round((player.px / TS + 0.5) * z - ox), py = Math.round((player.py / TS + 0.5) * z - oy);
     const blink = (Math.sin(time * 6) > -0.3);
     for (const ctx of [sctx, ectx]) {
-      ctx.fillStyle = Coop.room ? SCARVES[Coop.myColor()] : '#ff5a50';
+      ctx.fillStyle = SCARVES[Coop.myColor()];
       if (blink) { ctx.fillRect(px - 1, py - 1, 3, 3); }
       const rr = 4 + Math.floor((time * 6) % 4);
       ctx.fillRect(px - rr, py, 2, 1); ctx.fillRect(px + rr - 1, py, 2, 1);
