@@ -26,9 +26,9 @@ const KEYMAP = {
   KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
 };
 const input = {
-  order: [], keys: new Set(), drag: null, run: false,
-  held(d) { return this.order.indexOf(d) >= 0; },
-  dir() { return this.order.length ? this.order[this.order.length - 1] : null; },
+  order: [], keys: new Set(), drag: null, run: false, touchDir: null, touchRun: false,
+  held(d) { return this.touchDir === d || this.order.indexOf(d) >= 0; },
+  dir() { return this.touchDir || (this.order.length ? this.order[this.order.length - 1] : null); },
 };
 addEventListener('keydown', (e) => {
   if (e.target && e.target.tagName === 'INPUT') return;
@@ -66,7 +66,7 @@ function resize() {
   const dpr = Math.min(devicePixelRatio || 1, 2);
   const sw = Math.max(1, Math.floor(innerWidth * dpr)), sh = Math.max(1, Math.floor(innerHeight * dpr));
   cvs.width = sw; cvs.height = sh;
-  const base = Math.max(2, Math.floor(Math.min(sw / 400, sh / 225)));
+  const base = Math.max(2, Math.floor(Math.min(sw, sh) / 230));
   const scale = game.mode === 'map' ? Math.max(1, Math.floor(base / 2)) : base;
   const VW = sw / scale, VH = sh / scale;
   const SW = Math.ceil(VW) + 2, SH = Math.ceil(VH) + 2;
@@ -173,7 +173,7 @@ function update(dt) {
 
   const m = game.map, p = game.player;
   const dir = game.pending ? null : input.dir();
-  const arrived = p.update(dt, m, dir, input.run);
+  const arrived = p.update(dt, m, dir, input.run || input.touchRun);
   if (arrived) {
     if (m === game.world.map) MapView.reveal(p.x, p.y, 13);
     const e = m.entr.get(p.y * m.w + p.x);

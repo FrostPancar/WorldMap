@@ -16,6 +16,8 @@ Open `index.html` in a browser. There's no build step, and it works straight fro
 | Map: Q / E, mouse wheel | Zoom out / in |
 | Map: Space | Re-centre on the player |
 
+On phones and tablets, an on-screen d-pad (slide your thumb between directions), a RUN toggle and a MAP button appear, with zoom buttons while the map is open. The ⚙ menu moves to the top-left. Both portrait and landscape work.
+
 Walk into a cave mouth, door, stairway or ladder to go in or out.
 
 Append `?seed=1234` to the URL to generate a different world (the default seed is 1337).

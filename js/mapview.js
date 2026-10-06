@@ -164,7 +164,8 @@ const MapView = {
       const fx = Math.round((f.px / TS + 0.5) * z - ox), fy = Math.round((f.py / TS + 0.5) * z - oy);
       for (const ctx of [sctx, ectx]) { ctx.fillStyle = SCARVES[f.c]; ctx.fillRect(fx - 1, fy - 1, 3, 3); }
     }
-    this.compass(sctx, ectx, 26, 30);
+    // on touch screens the menu button sits top-left, so the compass moves right
+    this.compass(sctx, ectx, document.body.classList.contains('touch') ? Math.round(VW) - 28 : 26, 30);
   },
 
   compass(sctx, ectx, cx, cy) {
